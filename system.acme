@@ -1,0 +1,432 @@
+; definitions for the C64 hardware
+;===============================================================================
+
+!macro  bit_skip1 {
+        !byte $24
+}
+!macro  bit_skip2 {
+        !byte $2c
+}
+
+; colours:
+;                         hex   ¦ nybble
+BLACK                   = $00   ; %0000
+WHITE                   = $01   ; %0001
+RED                     = $02   ; %0010
+CYAN                    = $03   ; %0011
+PURPLE                  = $04   ; %0100
+GREEN                   = $05   ; %0101
+BLUE                    = $06   ; %0110
+YELLOW                  = $07   ; %0111
+ORANGE                  = $08   ; %1000
+BROWN                   = $09   ; %1001
+LTRED                   = $0a   ; %1010
+DKGREY                  = $0b   ; %1011
+GREY                    = $0c   ; %1100
+LTGREEN                 = $0d   ; %1101
+LTBLUE                  = $0e   ; %1110
+LTGREY                  = $0f   ; %1111
+
+PET_STOP                = $03
+
+PET_BLACK               = $90
+PET_WHITE               = $05
+PET_RED                 = $1c
+PET_CYAN                = $9f
+PET_PURPLE              = $9c
+PET_GREEN               = $1e
+PET_BLUE                = $1f
+PET_YELLOW              = $9e
+PET_ORANGE              = $81
+PET_BROWN               = $95
+PET_LTRED               = $96
+PET_DKGREY              = $97
+PET_GREY                = $98
+PET_LTGREEN             = $99
+PET_LTBLUE              = $9a
+PET_LTGREY              = $9b
+
+PET_CLR                 = $93   ; clear screen
+PET_LCASE               = $0e   ; switch to lower-case
+PET_CASEOFF             = $08   ; disable SHIFT+C= to switch cases
+
+PET_RVSON               = $12
+PET_RVSOFF              = $92
+
+PET_F1                  = $85
+PET_F2                  = $86
+PET_F3                  = $87
+PET_F4                  = $88
+PET_F5                  = $89
+PET_F6                  = $8a
+PET_F7                  = $8b
+PET_F8                  = $8c
+
+; KERNAL/BASIC:
+;===============================================================================
+!addr   vectors         = $0314
+
+VECTOR_IRQ              = $00   ;=$0314/5
+VECTOR_BRK              = $02   ;=$0316/7
+VECTOR_NMI              = $04   ;=$0318/9
+VECTOR_OPEN             = $06   ;=$031a/b
+VECTOR_CLOSE            = $08   ;=$031c/d
+VECTOR_CHKIN            = $0a   ;=$031e/f
+VECTOR_CHKOUT           = $0c   ;=$0320/1
+VECTOR_CLRCHN           = $0e   ;=$0322/3
+VECTOR_CHRIN            = $10   ;=$0324/5
+VECTOR_CHROUT           = $12   ;=$0326/7
+VECTOR_STOP             = $14   ;=$0328/9
+VECTOR_GETIN            = $16   ;=$032a/b
+VECTOR_CLALL            = $18   ;=$032c/d
+VECTOR_LOAD             = $1c   ;=$0330/1
+VECTOR_SAVE             = $1e   ;=$0332/3
+
+!addr   CPU_NMI         = $fffa
+!addr   CPU_NMI_LO      = $fffa
+!addr   CPU_NMI_HI      = $fffb
+
+!addr   CPU_RST         = $fffc
+!addr   CPU_RST_LO      = $fffc
+!addr   CPU_RST_HI      = $fffd
+
+!addr   CPU_IRQ         = $fffe
+!addr   CPU_IRQ_LO      = $fffe
+!addr   CPU_IRQ_HI      = $ffff
+
+; initialize VIC; restore default input/output to keyboard/screen;
+; clear screen; set PAL/NTSC switch and interrupt timer
+;
+!addr   kernal_scinit   = $ff81
+
+; initialize CIA's, SID volume; setup memory configuration;
+; set and start interrupt timer
+;
+!addr   kernal_ioinit   = $ff84
+
+; clear memory addresses $0002-$0101 and $0200-$03FF; run memory test
+; and set start and end address of BASIC work area accordingly;
+; set screen memory to $0400 and datasette buffer to $033C
+;
+!addr   kernal_ramtas   = $ff87
+
+; fill vector table at memory addresses $0314-$0333 with default values
+;
+!addr   kernal_restor   = $ff8a
+
+; copy vector table at memory addresses $0314-$0333 from or into user table.
+; input:
+;       carry : 0 = copy user table into vector table
+;               1 = copy vector table into user table
+;         X/Y : pointer to user table
+;
+!addr   kernal_vector   = $ff8d
+
+; set system error display switch at memory address $009D
+; input:
+;       A : switch value
+;
+!addr   kernal_setmsg   = $ff90
+
+; send `LISTEN` secondary address to serial bus.
+; (must call `LISTEN` beforehand)
+; input:
+;       A : secondary address.
+;
+!addr   kernal_lstnsa   = $ff93
+
+; send `TALK` secondary address to serial bus.
+; (must call `TALK` beforehand)
+; input:
+;       A : secondary address
+;
+!addr   kernal_talksa   = $ff96
+
+; save or restore start address of BASIC work area
+; input:
+;       carry : 0 = restore from input
+;               1 = save to output
+;         X/Y : address (if carry = 0)
+; output:
+;         X/Y : address (if carry = 1)
+;
+!addr   kernal_membot   = $ff99
+
+; save or restore end address of BASIC work area
+; input:
+;       carry : 0 = restore from input
+;               1 = Save to output
+;         X/Y : address (if carry = 0)
+; output:
+;         X/Y : address (if carry = 1)
+;
+!addr   kernal_memtop   = $ff9c
+
+; query keyboard; put current matrix code into memory address $00CB,
+; current status of shift keys into memory address $028D and PETSCII
+; code into keyboard buffer
+;
+!addr   kernal_scnkey   = $ff9f
+
+; unknown. (set serial bus timeout)
+; input:
+;       A : timeout value
+;
+!addr   kernal_settmo   = $ffa2
+
+; read byte from serial bus.
+; (must call `TALK` and `TALKSA` beforehand)
+; output:
+;       A : byte read
+;
+!addr   kernal_iecin    = $ffa5
+
+; write byte to serial bus.
+; (must call `LISTEN` and `LSTNSA` beforehand)
+; input:
+;       A : byte to write
+;
+!addr   kernal_iecout   = $ffa8
+
+; send `UNTALK` command to serial bus
+!addr   kernal_untalk   = $ffab
+
+; send `UNLISTEN` command to serial bus
+!addr   kernal_unlstn   = $ffae
+
+; send `LISTEN` command to serial bus
+; input:
+;       A : device number
+;
+!addr   kernal_listen   = $ffb1
+
+; send `TALK` command to serial bus
+; input:
+;       A : device number
+;
+!addr   kernal_talk     = $ffb4
+
+; fetch status of current input/output device, value of `ST` variable
+; (for RS232, status is cleared)
+; output:
+;       A : device status
+;
+!addr   kernal_readst   = $ffb7
+
+; set file parameters
+; input:
+;       A : logical number
+;       X : device number
+;       Y : secondary address
+;
+!addr   kernal_setlfs   = $ffba
+
+; set file name parameters
+; input:
+;         A : file name length
+;       X/Y : pointer to file name
+;
+!addr   kernal_setnam   = $ffbd
+
+; open file (must call `SETLFS` and `SETNAM` beforehand)
+!addr   kernal_open     = $ffc0
+
+; close file
+; input:
+;       A : logical number
+;
+!addr   kernal_close    = $ffc3
+
+; define file as default input
+; (must call `OPEN` beforehand)
+; input:
+;       X : logical number
+;
+!addr   kernal_chkin    = $ffc6
+
+; define file as default output
+; (must call `OPEN` beforehand)
+; input:
+;       X : logical number
+;
+!addr   kernal_chkout   = $ffc9
+
+; close default input/output files (for serial bus, send `UNTALK` and/or
+; `UNLISTEN`); restore default input/output to keyboard/screen
+!addr   kernal_clrchn   = $ffcc
+
+; read byte from default input (for keyboard, read a line from the screen).
+; (if not keyboard, must call `OPEN` and `CHKIN` beforehand)
+; output:
+;       A : byte read
+;
+!addr   kernal_chrin    = $ffcf
+
+; write byte to default output
+; (if not screen, must call `OPEN` and `CHKOUT` beforehand)
+; input:
+;       A : byte to write
+;
+!addr   kernal_chrout   = $ffd2
+
+; load or verify file. (must call `SETLFS` and `SETNAM` beforehand)
+; input:
+;           A : 0 = load, 1-255 = verify;
+;         X/Y : load address (if secondary address = 0)
+; output:
+;       carry : 0 = no errors, 1 = error
+;           A : KERNAL error code (if carry = 1)
+;         X/Y : address of last byte loaded/verified (if carry = 0)
+;
+!addr   kernal_load     = $ffd5
+
+; save file. (must call `SETLFS` and `SETNAM` beforehand)
+; input:
+;           A : address of zero page register holding
+;               start address of memory area to save
+;         X/Y : End address of memory area plus 1.
+; output:
+;       carry : 0 = No errors, 1 = Error
+;           A : KERNAL error code (if carry = 1)
+;
+!addr   kernal_save     = $ffd8
+
+; set Time of Day, at memory address $00A0-$00A2
+; input:
+;       A/X/Y : new TOD value
+;
+!addr   kernal_settim   = $ffdb
+
+; read Time of Day, at memory address $00A0-$00A2
+; output:
+;       A/X/Y : current TOD value
+;
+!addr   kernal_rdtim    = $ffde
+
+; query Stop key indicator, at memory address $0091;
+; if pressed, call CLRCHN and clear keyboard buffer
+; output:
+;        zero : 0 = not pressed, 1 = pressed
+;       carry : 1 = pressed
+;
+!addr   kernal_stop     = $ffe1
+
+; read byte from default input
+; (if not keyboard, must call `OPEN` and `CHKIN` beforehand)
+; output:
+;       A : byte read
+;
+!addr   kernal_getin    = $ffe4
+
+; clear file table; call `CLRCHN`
+!addr   kernal_clall    = $ffe7
+
+; update Time of Day, at memory address $00A0-$00A2,
+; and stop-key indicator, at memory address $0091
+!addr   kernal_udtim    = $ffea
+
+; fetch number of screen rows and columns
+; output:
+;       X : number of columns (40)
+;       Y : number of rows (25)
+;
+!addr   kernal_screen   = $ffed
+
+; save or restore cursor position
+; input:
+;       carry : 0 = restore from input, 1 = save to output
+;           X : cursor column (if carry = 0)
+;           Y : cursor row (if carry = 0)
+; output:
+;           X : cursor column (if carry = 1)
+;           Y : cursor row (if carry = 1)
+;
+!addr   kernal_plot     = $fff0
+
+; fetch CIA1 base address
+; output:
+;       X/Y : CIA1 base address ($DC00)
+;
+!addr   kernal_iobase   = $fff3
+
+; address space:
+;===============================================================================
+!addr   zp              = $00
+!addr   stack           = $0100
+!addr   work            = $0200
+!addr   vector          = $0300
+!addr   screen          = $0400
+!addr   vic             = $d000
+!addr   sid             = $d400
+!addr   vic_color       = $d800
+!addr   cia1            = $dc00
+!addr   cia2            = $dd00
+
+; the VIC-II registers:
+;-------------------------------------------------------------------------------
+VIC_SPRITE0_X           = $00   ;=$D000
+VIC_SPRITE0_Y           = $01   ;=$D001
+VIC_SPRITE1_X           = $02   ;=$D002
+VIC_SPRITE1_Y           = $03   ;=$D003
+VIC_SPRITE2_X           = $04   ;=$D004
+VIC_SPRITE2_Y           = $05   ;=$D005
+VIC_SPRITE3_X           = $06   ;=$D006
+VIC_SPRITE3_Y           = $07   ;=$D007
+VIC_SPRITE4_X           = $08   ;=$D008
+VIC_SPRITE4_Y           = $09   ;=$D009
+VIC_SPRITE5_X           = $0a   ;=$D00A
+VIC_SPRITE5_Y           = $0b   ;=$D00B
+VIC_SPRITE6_X           = $0c   ;=$D00C
+VIC_SPRITE6_Y           = $0d   ;=$D00D
+VIC_SPRITE7_X           = $0e   ;=$D00E
+VIC_SPRITE7_Y           = $0f   ;=$D00F
+VIC_SPRITES_X           = $10   ;=$D010
+VIC_SCREEN_VERT         = $11   ;=$D011
+VIC_SCANLINE            = $12   ;=$D012
+VIC_LIGHTPEN_X          = $13   ;=$D013
+VIC_LIGHTPEN_Y          = $14   ;=$D014
+VIC_SPRITE_ENABLE       = $15   ;=$D015
+VIC_SCREEN_HORZ         = $16   ;=$D016
+VIC_SPRITE_XPAND_VERT   = $17   ;=$D017
+VIC_LAYOUT              = $18   ;=$D018
+VIC_IRQ_STATUS          = $19   ;=$D019
+VIC_IRQ_CONTROL         = $1a   ;=$D01A
+VIC_SPRITE_PRIORITY     = $1b   ;=$D01B
+VIC_SPRITE_MULTICOLOR   = $1c   ;=$D01C
+VIC_SPRITE_XPAND_HORZ   = $1d   ;=$D01D
+VIC_SPRITE_HIT_SPRITE   = $1e   ;=$D01E
+VIC_SPRITE_HIT_BKGRND   = $1f   ;=$D01F
+VIC_SCREEN_BORDER       = $20   ;=$D020
+VIC_SCREEN_BKGRND       = $21   ;=$D021
+VIC_SCREEN_BKGRND1      = $22   ;=$D022
+VIC_SCREEN_BKGRND2      = $23   ;=$D023
+VIC_SCREEN_BKGRND3      = $24   ;=$D024
+VIC_SPRITES_COLOR1      = $25   ;=$D025
+VIC_SPRITES_COLOR2      = $26   ;=$D026
+VIC_SPRITE0_COLOR       = $27   ;=$D027
+VIC_SPRITE1_COLOR       = $28   ;=$D028
+VIC_SPRITE2_COLOR       = $29   ;=$D029
+VIC_SPRITE3_COLOR       = $2a   ;=$D02A
+VIC_SPRITE4_COLOR       = $2b   ;=$D02B
+VIC_SPRITE5_COLOR       = $2c   ;=$D02C
+VIC_SPRITE6_COLOR       = $2d   ;=$D02D
+VIC_SPRITE7_COLOR       = $2e   ;=$D02E
+
+; CIA1+2 registers:
+;-------------------------------------------------------------------------------
+CIA_PORTA               = $00   ;=$DC00/$DD00
+CIA_PORTB               = $01   ;=$DC01/$DD01
+CIA_PORTA_DDR           = $02   ;=$DC02/$DD02
+CIA_PORTB_DDR           = $03   ;=$DC03/$DD03
+CIA_TIMERA_LO           = $04   ;=$DC04/$DD04
+CIA_TIMERA_HI           = $05   ;=$DC05/$DD05
+CIA_TIMERB_LO           = $06   ;=$DC06/$DD06
+CIA_TIMERB_HI           = $07   ;=$DC07/$DD07
+CIA_TOD_TENTHS          = $08   ;=$DC08/$DD08
+CIA_TOD_SECS            = $09   ;=$DC09/$DD09
+CIA_TOD_MINS            = $0a   ;=$DC0A/$DD0A
+CIA_TOD_HOURS           = $0b   ;=$DC0B/$DD0B
+CIA_SHIFT               = $0c   ;=$DC0C/$DD0C
+CIA_IRQ                 = $0d   ;=$DC0D/$DD0D
+CIA_TIMERA              = $0e   ;=$DC0E/$DD0E
+CIA_TIMERB              = $0f   ;=$DC0F/$DD0F
