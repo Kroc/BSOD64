@@ -367,6 +367,7 @@ bsod_freeze
         ; note that when invoking BSOD64 by JSR the BRK-bit is always set
         ; due to the use of PHP to push the processor status to the stack
         ; which always sets the BRK-bit
+        ;
         bit bsod_is_jsr         ; invoked by JSR and not an interrupt?
         bpl +                   ; skip over BRK-handling of PC
         bit bsod_is_brk         ; check the BRK state
