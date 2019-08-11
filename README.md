@@ -8,9 +8,11 @@ Why would anybody want this?
 
 ## Easy Error Feedback ##
 
-If you're new to C64 assembly programming it will strike you just how difficult it is to catch errors. If something goes wrong, the machine will just keep running and glitch-out and there's really no easy way to get feedback on *where* the error occurred, or to put a message on screen without writing a _lot_ of code.
+If you're new to C64 assembly programming it will strike you just how difficult it is to catch errors, let alone _see_ them. If something goes wrong, the machine will just keep running and glitch-out and there's really no easy way to get feedback on *where* the error occurred, or to put a message on screen without writing a _lot_ of code.
 
 BSOD64 is the `alert(...)` of the C64 world.
+
+With BSOD64, a `BRK` instruction will stop your code and allow you to inspect the machine's state!
 
 ## Distributable to End-Users ##
 
@@ -24,4 +26,4 @@ What if you're testing on an emulator or system -- XBox, Wii, PSP -- that doesn'
 
 (TODO: photo of BSOD64 running on PSP-Vice)
 
-BSOD64 gives you a way to test and debug on fixed systems where you can't "just install a debugger" and debug issues unique to emulators that won't ever be updated again.
+BSOD64 gives you a way to test and debug on fixed systems and debug issues unique to emulators that might never be updated!

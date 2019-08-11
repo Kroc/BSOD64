@@ -12,7 +12,7 @@
 ; - does not need to be compiled into your own program
 ; - no need for compatibility with any particular assembler
 ; - can be loaded from disk using BASIC
-; - resides in "unused" memory ($C000..$D000)
+; - resides in "unused" memory ($C000..$E000)
 ;
 ; * small:
 ; - maximum limit of 4 KB code
@@ -25,13 +25,13 @@
 !zone   bsod64 {
 
 ;===============================================================================
-!addr   orig_zp         = $f000 ; backup of zero-page ($0000-$00FF)
-!addr   orig_stack      = $f100 ; backup of stack ($0100-$1FF)
-!addr   orig_work       = $f200 ; backup of KERNAL work-RAM ($0200-$02FF)
-!addr   orig_vectors    = $f300 ; backup of KERNAL/BASIC vectors ($0300-$03FF)
-!addr   orig_screen     = $f400 ; backup of text screen ($0400-$04FF)
-!addr   orig_color      = $f500 ; backup of colour RAM
-!addr   orig_vic        = $f600 ; backup of VIC-II registers (46-bytes)
+!addr   frzn_zp         = $d000 ; backup of zero-page ($0000-$00FF)
+!addr   frzn_stack      = $d100 ; backup of stack ($0100-$1FF)
+!addr   frzn_work       = $d200 ; backup of KERNAL work-RAM ($0200-$02FF)
+!addr   frzn_vectors    = $d300 ; backup of KERNAL/BASIC vectors ($0300-$03FF)
+!addr   frzn_screen     = $d400 ; backup of text screen ($0400-$04FF)
+!addr   frzn_vic        = $d500 ; backup of VIC-II registers (46-bytes)
+!addr   frzn_color      = $d800 ; backup of colour RAM
 
 ;-------------------------------------------------------------------------------
 ; depending on how BSDO64 is invoked, different actions
@@ -207,37 +207,55 @@ bsod_freeze
 
         ; freeze low-memory:
         ;-----------------------------------------------------------------------
-        ; backup the original zero-page. this includes the processor port
-        ; ($00/$01) that defines the memory layout that we must reinstate
-        ; when we defrost. note that even if the KERNAL is on, we can still
-        ; write to the RAM underneath
+        ; the area we will backup to is under I/O, so before we can write there
+        ; we need to change the memory layout. first we backup the processor
+        ; port, and then change memory layout to turn off I/O
         ;
+        ; the "data direction register" determines what bits of the processor
+        ; port can be written to. this is important to make use of because the
+        ; Datasette control lines are part of the processor port and you don't
+        ; want to play around with the tape when changing memory layout
+        ;
+        ; we actually want to stop the tape motor when freezing BSOD64
+        ; so we set the data-direction register to allow us to turn off bit 5
+        ;
+        lda zp+0                ; current CPU data-direction register
+        sta orig_cpu_ddir       ; backup within BSOD64's code-area
+        lda # %00100111         ; allow writes to motor and memory layout
+        sta zp+0
+        lda zp+1                ; current CPU port value
+        sta orig_cpu_port       ; backup
+        ;     %--0-----         = Datasette motor off
+        ;     %-----1--         = use I/O instead of char ROM
+        ;     $------00         = I/O, KERNAL and BASIC ROMs off
+        lda # %00000100
+        sta zp+1
+        ; now disable writes to the tape motor
+        ; until we need to defrost the machine
+        lda # %00000111         ; allow only memory-layout changes
+        sta zp+0                ; write to data-direction register
+
+        ; backup the low four pages of memory
         ldx # 0
+        ; backup the zero-page
 -       lda zp, x
-        sta orig_zp, x
+        sta frzn_zp, x
         ; backup the original stack. since BSOD64 will be using the stack
         ; too, we will want to take a copy of the stack at freeze-time
         lda stack, x
-        sta orig_stack, x
+        sta frzn_stack, x
         ; backup the KERNAL/BASIC work RAM at $0200-$02FF
         lda work, x
-        sta orig_work, x
+        sta frzn_work, x
         ; backup the KERNAL/BASIC vectors at $0300-$03FF
         lda vector, x
-        sta orig_vectors, x
+        sta frzn_vectors, x
         ; backup the original text screen at $0400-$04FF
         lda screen, X
-        sta orig_screen, x
+        sta frzn_screen, x
         ; rinse and repeat
         dex
         bne -
-
-        ; with the CPU port registers $00 & $01 backed up, we can now change
-        ; memory layout to ensure I/O is accessible to backup VIC, SID etc.
-        lda # %00000011         ; ignore Datasette control,
-        sta zp+0                ; only modify memory layout
-        lsr                     ; = %00000001: I/O on, KERNAL & BASIC off
-        sta zp+1
 
         ; with KERNAL off, we can back up the hardware vectors underneath:
         ; the non-maskable interrupt, wired to the RESTORE key & CIA2
@@ -262,30 +280,44 @@ bsod_freeze
         ; backup the VIC-II state before we start changing the screen
         ;
         ldx # $2e               ; number of VIC-II registers
--       lda vic, x
-        sta orig_vic, x
+-       inc zp+1                ; enable the I/O shield for VIC-II registers
+        lda vic, x
+        dec zp+1                ; enable RAM under the I/O shield
+        sta frzn_vic, x
         dex
         bpl -
 
-        ; backup colour RAM. this is done in four
-        ; stripes to avoid using a nested loop
+        ; backup colour RAM:
+        ;-----------------------------------------------------------------------
+        ; this is done in four stripes to avoid using a nested loop.
+        ; note that because BSOD64 stores the frozen machine state under I/O,
+        ; we have to turn I/O on & off for each read + write
+        ;
         ldx # 0
--       lda vic_color  + $000, x
-        sta orig_color + $000, x
+-       inc zp+1                ; enable the I/O shield for VIC-II registers
+        lda vic_color  + $000, x
+        dec zp+1                ; enable RAM under the I/O shield
+        sta frzn_color + $000, x
+        inc zp+1                ; enable the I/O shield for VIC-II registers
         lda vic_color  + $100, x
-        sta orig_color + $100, x
+        dec zp+1                ; enable RAM under the I/O shield
+        sta frzn_color + $100, x
+        inc zp+1                ; enable the I/O shield for VIC-II registers
         lda vic_color  + $200, x
-        sta orig_color + $200, x
+        dec zp+1                ; enable RAM under the I/O shield
+        sta frzn_color + $200, x
+        inc zp+1                ; enable the I/O shield for VIC-II registers
         lda vic_color  + $300, x
-        sta orig_color + $300, x
+        dec zp+1                ; enable RAM under the I/O shield
+        sta frzn_color + $300, x
         dex
         bne -
 
         ; reset machine state:
         ;-----------------------------------------------------------------------
-        ; enable KERNAL & BASIC
-        inc zp+1
-        inc zp+1
+        inc zp+1                ; enable I/O shield
+        inc zp+1                ; switch on KERNAL ROM
+        inc zp+1                ; switch on BASIC ROM
 
         ; this KERNAL routine erases pages 0, 1, & 2, runs a memory test,
         ; and configures BASIC limits. it sets the page number for screen
@@ -429,8 +461,7 @@ bsod_redraw:
         !byte   STR_KEYPOS, 24, 0
         !pet    PET_F1, "MEMORY ", STR_KEY
         !pet    PET_F3, "VIC ", STR_KEY
-        !pet    PET_F5, "SID ", STR_KEY
-        !pet    PET_F7, "DISK"
+        !pet    PET_F5, "DISK"
         ; registers title
         !pet    STR_KEYPOS, 0, 18, "R", "REGISTERS"
         ; flags title
@@ -488,6 +519,7 @@ bsod_redraw:
 
         ; set the colour ready for filling in the data
 @data:  jsr bsod_print_str_inline
+        !pet    PET_RVSOFF
         !pet    PET_LTBLUE, STR_END
 
         ; redraw the various windows' data
@@ -613,9 +645,11 @@ bsod_redraw_banks:
         ;
         sei                     ; disable interrupts
         dec zp+1                ; turn off BASIC,
-        dec zp+1                ; and then KERNAL
-        lda orig_zp+1
-        inc zp+1                ; turn on KERNAL,
+        dec zp+1                ; then KERNAL
+        dec zp+1                ; and then I/O
+        lda frzn_zp+1
+        inc zp+1                ; turn on I/O,
+        inc zp+1                ; then KERNAL,
         inc zp+1                ; and then BASIC
         cli                     ; enable interrupts
         and # %00000011         ; we only care about the bottom bits
@@ -690,9 +724,11 @@ bsod_redraw_stack:
 
         sei                     ; disable interrupts
         dec zp+1                ; turn off BASIC,
-        dec zp+1                ; and then KERNAL
-        lda orig_stack+1, y
-        inc zp+1                ; turn on KERNAL,
+        dec zp+1                ; then KERNAL
+        dec zp+1                ; and then I/O
+        lda frzn_stack+1, y
+        inc zp+1                ; turn on I/O
+        inc zp+1                ; then KERNAL,
         inc zp+1                ; and then BASIC
         cli                     ; enable interrupts
         jsr bsod_print_hex8     ; print the value
@@ -775,7 +811,7 @@ bsod_print_hexline:
 
 ;===============================================================================
 ; read the value of an address from the frozen state:
-; i.e. redirect addresses $0000-$04FF to $F000-$F4FF
+; i.e. redirect addresses $0000-$04FF to $D000-$D4FF
 ; (also this must always read RAM and not I/O or ROM)
 ;
 ;       A = original address lo-byte
@@ -798,7 +834,7 @@ bsod_get_addr:
         ; the address is within low-RAM, redirect the address
         ; to the frozen copy in high-RAM
         clc
-        adc # $f0
+        adc # $d0
 
 +       sta @addr+2             ; set address hi-byte to read
         pla                     ; retreive the lo-byte
@@ -806,9 +842,11 @@ bsod_get_addr:
 
         sei                     ; disable interrupts
         dec zp+1                ; turn off BASIC,
-        dec zp+1                ; and then KERNAL
+        dec zp+1                ; then KERNAL
+        dec zp+1                ; and then I/O
 @addr   lda $8888               ; read the RAM address
-        inc zp+1                ; turn on KERNAL,
+        inc zp+1                ; turn on I/O
+        inc zp+1                ; then KERNAL,
         inc zp+1                ; and then BASIC
         cli                     ; enable interrupts
 
@@ -1176,6 +1214,10 @@ bsod_nmi_handler:
 ; to corruption, and remain unmodified. working copies are made
 ; whilst BSOD64 is in use
 ;
+orig_cpu_ddir:                  ; backup of the CPU data-direction port ($00)
+        !byte   $88
+orig_cpu_port:                  ; backup of the CPU port ($01)
+        !byte   $88
 orig_a:                         ; backup of the A register
         !byte   $88
 orig_x:                         ; backup of the X register

@@ -362,7 +362,7 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 !addr   cia1            = $dc00
 !addr   cia2            = $dd00
 
-; the VIC-II registers:
+; VIC-II registers:
 ;-------------------------------------------------------------------------------
 VIC_SPRITE0_X           = $00   ;=$D000
 VIC_SPRITE0_Y           = $01   ;=$D001
