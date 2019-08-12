@@ -24,6 +24,6 @@ BSOD64 can be included in your program to catch things that "shouldn't be possib
 
 What if you're testing on an emulator or system -- XBox, Wii, PSP -- that doesn't have a debugger? No way to inspect the state of the memory?
 
-(TODO: photo of BSOD64 running on PSP-Vice)
+![BSOD64 appearing on a Sony PSP](bsod_psp.jpg)
 
 BSOD64 gives you a way to test and debug on fixed systems and debug issues unique to emulators that might never be updated!
