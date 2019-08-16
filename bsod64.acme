@@ -93,6 +93,10 @@
 !addr   zp_str_hi       = $36
 
 ;===============================================================================
+; when an instruction operand is overwritten, this is the placeholder value
+!addr   NULL_VALUE      = $88
+; when a JMP instruction is overwritten, this is the placeholder address
+!addr   NULL_ADDR       = $8888
 
 STR_END                 = $00
 STR_POS                 = $01
@@ -844,7 +848,7 @@ bsod_get_addr:
         dec zp+1                ; turn off BASIC,
         dec zp+1                ; then KERNAL
         dec zp+1                ; and then I/O
-@addr   lda $8888               ; read the RAM address
+@addr   lda NULL_ADDR           ; read the RAM address
         inc zp+1                ; turn on I/O
         inc zp+1                ; then KERNAL,
         inc zp+1                ; and then BASIC
