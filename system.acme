@@ -7,64 +7,68 @@
 !macro  bit_skip2 {
         !byte $2c
 }
+; "halt & catch fire"
+!macro  hcf {
+        !byte $f2
+}
 
 ; colours:
 ;                         hex   ¦ nybble
-BLACK                   = $00   ; %0000
-WHITE                   = $01   ; %0001
-RED                     = $02   ; %0010
-CYAN                    = $03   ; %0011
-PURPLE                  = $04   ; %0100
-GREEN                   = $05   ; %0101
-BLUE                    = $06   ; %0110
-YELLOW                  = $07   ; %0111
-ORANGE                  = $08   ; %1000
-BROWN                   = $09   ; %1001
-LTRED                   = $0a   ; %1010
-DKGREY                  = $0b   ; %1011
-GREY                    = $0c   ; %1100
-LTGREEN                 = $0d   ; %1101
-LTBLUE                  = $0e   ; %1110
-LTGREY                  = $0f   ; %1111
+.VIC_BLACK              = $00   ; %0000
+.VIC_WHITE              = $01   ; %0001
+.VIC_RED                = $02   ; %0010
+.VIC_CYAN               = $03   ; %0011
+.VIC_PURPLE             = $04   ; %0100
+.VIC_GREEN              = $05   ; %0101
+.VIC_BLUE               = $06   ; %0110
+.VIC_YELLOW             = $07   ; %0111
+.VIC_ORANGE             = $08   ; %1000
+.VIC_BROWN              = $09   ; %1001
+.VIC_LTRED              = $0a   ; %1010
+.VIC_DKGREY             = $0b   ; %1011
+.VIC_GREY               = $0c   ; %1100
+.VIC_LTGREEN            = $0d   ; %1101
+.VIC_LTBLUE             = $0e   ; %1110
+.VIC_LTGREY             = $0f   ; %1111
 
-PET_STOP                = $03
+.PET_STOP               = $03
 
-PET_BLACK               = $90
-PET_WHITE               = $05
-PET_RED                 = $1c
-PET_CYAN                = $9f
-PET_PURPLE              = $9c
-PET_GREEN               = $1e
-PET_BLUE                = $1f
-PET_YELLOW              = $9e
-PET_ORANGE              = $81
-PET_BROWN               = $95
-PET_LTRED               = $96
-PET_DKGREY              = $97
-PET_GREY                = $98
-PET_LTGREEN             = $99
-PET_LTBLUE              = $9a
-PET_LTGREY              = $9b
+.PET_BLACK              = $90
+.PET_WHITE              = $05
+.PET_RED                = $1c
+.PET_CYAN               = $9f
+.PET_PURPLE             = $9c
+.PET_GREEN              = $1e
+.PET_BLUE               = $1f
+.PET_YELLOW             = $9e
+.PET_ORANGE             = $81
+.PET_BROWN              = $95
+.PET_LTRED              = $96
+.PET_DKGREY             = $97
+.PET_GREY               = $98
+.PET_LTGREEN            = $99
+.PET_LTBLUE             = $9a
+.PET_LTGREY             = $9b
 
-PET_CLR                 = $93   ; clear screen
-PET_LCASE               = $0e   ; switch to lower-case
-PET_CASEOFF             = $08   ; disable SHIFT+C= to switch cases
+.PET_CLR                = $93   ; clear screen
+.PET_LCASE              = $0e   ; switch to lower-case
+.PET_CASEOFF            = $08   ; disable SHIFT+C= to switch cases
 
-PET_RVSON               = $12
-PET_RVSOFF              = $92
+.PET_RVSON              = $12
+.PET_RVSOFF             = $92
 
-PET_F1                  = $85
-PET_F2                  = $86
-PET_F3                  = $87
-PET_F4                  = $88
-PET_F5                  = $89
-PET_F6                  = $8a
-PET_F7                  = $8b
-PET_F8                  = $8c
+.PET_F1                 = $85
+.PET_F2                 = $86
+.PET_F3                 = $87
+.PET_F4                 = $88
+.PET_F5                 = $89
+.PET_F6                 = $8a
+.PET_F7                 = $8b
+.PET_F8                 = $8c
 
 ; KERNAL/BASIC:
 ;===============================================================================
-!addr   vectors         = $0314
+!addr   .vectors        = $0314
 
 VECTOR_IRQ              = $00   ;=$0314/5
 VECTOR_BRK              = $02   ;=$0316/7
@@ -82,37 +86,39 @@ VECTOR_CLALL            = $18   ;=$032c/d
 VECTOR_LOAD             = $1c   ;=$0330/1
 VECTOR_SAVE             = $1e   ;=$0332/3
 
-!addr   CPU_NMI         = $fffa
-!addr   CPU_NMI_LO      = $fffa
-!addr   CPU_NMI_HI      = $fffb
+!addr {
 
-!addr   CPU_RST         = $fffc
-!addr   CPU_RST_LO      = $fffc
-!addr   CPU_RST_HI      = $fffd
+.cpu_nmi                = $fffa
+.cpu_nmi_lo             = $fffa
+.cpu_nmi_hi             = $fffb
 
-!addr   CPU_IRQ         = $fffe
-!addr   CPU_IRQ_LO      = $fffe
-!addr   CPU_IRQ_HI      = $ffff
+.cpu_rst                = $fffc
+.cpu_rst_lo             = $fffc
+.cpu_rst_hi             = $fffd
+
+.cpu_irq                = $fffe
+.cpu_irq_lo             = $fffe
+.cpu_irq_hi             = $ffff
 
 ; initialize VIC; restore default input/output to keyboard/screen;
 ; clear screen; set PAL/NTSC switch and interrupt timer
 ;
-!addr   kernal_scinit   = $ff81
+.kernal_scinit          = $ff81
 
 ; initialize CIA's, SID volume; setup memory configuration;
 ; set and start interrupt timer
 ;
-!addr   kernal_ioinit   = $ff84
+.kernal_ioinit          = $ff84
 
 ; clear memory addresses $0002-$0101 and $0200-$03FF; run memory test
 ; and set start and end address of BASIC work area accordingly;
 ; set screen memory to $0400 and datasette buffer to $033C
 ;
-!addr   kernal_ramtas   = $ff87
+.kernal_ramtas          = $ff87
 
 ; fill vector table at memory addresses $0314-$0333 with default values
 ;
-!addr   kernal_restor   = $ff8a
+.kernal_restor          = $ff8a
 
 ; copy vector table at memory addresses $0314-$0333 from or into user table.
 ; input:
@@ -120,27 +126,27 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;               1 = copy vector table into user table
 ;         X/Y : pointer to user table
 ;
-!addr   kernal_vector   = $ff8d
+.kernal_vector          = $ff8d
 
 ; set system error display switch at memory address $009D
 ; input:
 ;       A : switch value
 ;
-!addr   kernal_setmsg   = $ff90
+.kernal_setmsg          = $ff90
 
 ; send `LISTEN` secondary address to serial bus.
 ; (must call `LISTEN` beforehand)
 ; input:
 ;       A : secondary address.
 ;
-!addr   kernal_lstnsa   = $ff93
+.kernal_lstnsa          = $ff93
 
 ; send `TALK` secondary address to serial bus.
 ; (must call `TALK` beforehand)
 ; input:
 ;       A : secondary address
 ;
-!addr   kernal_talksa   = $ff96
+.kernal_talksa          = $ff96
 
 ; save or restore start address of BASIC work area
 ; input:
@@ -150,7 +156,7 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ; output:
 ;         X/Y : address (if carry = 1)
 ;
-!addr   kernal_membot   = $ff99
+.kernal_membot          = $ff99
 
 ; save or restore end address of BASIC work area
 ; input:
@@ -160,58 +166,58 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ; output:
 ;         X/Y : address (if carry = 1)
 ;
-!addr   kernal_memtop   = $ff9c
+.kernal_memtop          = $ff9c
 
 ; query keyboard; put current matrix code into memory address $00CB,
 ; current status of shift keys into memory address $028D and PETSCII
 ; code into keyboard buffer
 ;
-!addr   kernal_scnkey   = $ff9f
+.kernal_scnkey          = $ff9f
 
 ; unknown. (set serial bus timeout)
 ; input:
 ;       A : timeout value
 ;
-!addr   kernal_settmo   = $ffa2
+.kernal_settmo          = $ffa2
 
 ; read byte from serial bus.
 ; (must call `TALK` and `TALKSA` beforehand)
 ; output:
 ;       A : byte read
 ;
-!addr   kernal_iecin    = $ffa5
+.kernal_iecin           = $ffa5
 
 ; write byte to serial bus.
 ; (must call `LISTEN` and `LSTNSA` beforehand)
 ; input:
 ;       A : byte to write
 ;
-!addr   kernal_iecout   = $ffa8
+.kernal_iecout          = $ffa8
 
 ; send `UNTALK` command to serial bus
-!addr   kernal_untalk   = $ffab
+.kernal_untalk          = $ffab
 
 ; send `UNLISTEN` command to serial bus
-!addr   kernal_unlstn   = $ffae
+.kernal_unlstn          = $ffae
 
 ; send `LISTEN` command to serial bus
 ; input:
 ;       A : device number
 ;
-!addr   kernal_listen   = $ffb1
+.kernal_listen          = $ffb1
 
 ; send `TALK` command to serial bus
 ; input:
 ;       A : device number
 ;
-!addr   kernal_talk     = $ffb4
+.kernal_talk            = $ffb4
 
 ; fetch status of current input/output device, value of `ST` variable
 ; (for RS232, status is cleared)
 ; output:
 ;       A : device status
 ;
-!addr   kernal_readst   = $ffb7
+.kernal_readst          = $ffb7
 
 ; set file parameters
 ; input:
@@ -219,55 +225,55 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;       X : device number
 ;       Y : secondary address
 ;
-!addr   kernal_setlfs   = $ffba
+.kernal_setlfs          = $ffba
 
 ; set file name parameters
 ; input:
 ;         A : file name length
 ;       X/Y : pointer to file name
 ;
-!addr   kernal_setnam   = $ffbd
+.kernal_setnam          = $ffbd
 
 ; open file (must call `SETLFS` and `SETNAM` beforehand)
-!addr   kernal_open     = $ffc0
+.kernal_open            = $ffc0
 
 ; close file
 ; input:
 ;       A : logical number
 ;
-!addr   kernal_close    = $ffc3
+.kernal_close           = $ffc3
 
 ; define file as default input
 ; (must call `OPEN` beforehand)
 ; input:
 ;       X : logical number
 ;
-!addr   kernal_chkin    = $ffc6
+.kernal_chkin           = $ffc6
 
 ; define file as default output
 ; (must call `OPEN` beforehand)
 ; input:
 ;       X : logical number
 ;
-!addr   kernal_chkout   = $ffc9
+.kernal_chkout          = $ffc9
 
 ; close default input/output files (for serial bus, send `UNTALK` and/or
 ; `UNLISTEN`); restore default input/output to keyboard/screen
-!addr   kernal_clrchn   = $ffcc
+.kernal_clrchn          = $ffcc
 
 ; read byte from default input (for keyboard, read a line from the screen).
 ; (if not keyboard, must call `OPEN` and `CHKIN` beforehand)
 ; output:
 ;       A : byte read
 ;
-!addr   kernal_chrin    = $ffcf
+.kernal_chrin           = $ffcf
 
 ; write byte to default output
 ; (if not screen, must call `OPEN` and `CHKOUT` beforehand)
 ; input:
 ;       A : byte to write
 ;
-!addr   kernal_chrout   = $ffd2
+.kernal_chrout          = $ffd2
 
 ; load or verify file. (must call `SETLFS` and `SETNAM` beforehand)
 ; input:
@@ -278,7 +284,7 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;           A : KERNAL error code (if carry = 1)
 ;         X/Y : address of last byte loaded/verified (if carry = 0)
 ;
-!addr   kernal_load     = $ffd5
+.kernal_load            = $ffd5
 
 ; save file. (must call `SETLFS` and `SETNAM` beforehand)
 ; input:
@@ -289,19 +295,19 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;       carry : 0 = No errors, 1 = Error
 ;           A : KERNAL error code (if carry = 1)
 ;
-!addr   kernal_save     = $ffd8
+.kernal_save            = $ffd8
 
 ; set Time of Day, at memory address $00A0-$00A2
 ; input:
 ;       A/X/Y : new TOD value
 ;
-!addr   kernal_settim   = $ffdb
+.kernal_settim          = $ffdb
 
 ; read Time of Day, at memory address $00A0-$00A2
 ; output:
 ;       A/X/Y : current TOD value
 ;
-!addr   kernal_rdtim    = $ffde
+.kernal_rdtim           = $ffde
 
 ; query Stop key indicator, at memory address $0091;
 ; if pressed, call CLRCHN and clear keyboard buffer
@@ -309,28 +315,28 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;        zero : 0 = not pressed, 1 = pressed
 ;       carry : 1 = pressed
 ;
-!addr   kernal_stop     = $ffe1
+.kernal_stop            = $ffe1
 
 ; read byte from default input
 ; (if not keyboard, must call `OPEN` and `CHKIN` beforehand)
 ; output:
 ;       A : byte read
 ;
-!addr   kernal_getin    = $ffe4
+.kernal_getin           = $ffe4
 
 ; clear file table; call `CLRCHN`
-!addr   kernal_clall    = $ffe7
+.kernal_clall           = $ffe7
 
 ; update Time of Day, at memory address $00A0-$00A2,
 ; and stop-key indicator, at memory address $0091
-!addr   kernal_udtim    = $ffea
+.kernal_udtim           = $ffea
 
 ; fetch number of screen rows and columns
 ; output:
 ;       X : number of columns (40)
 ;       Y : number of rows (25)
 ;
-!addr   kernal_screen   = $ffed
+.kernal_screen          = $ffed
 
 ; save or restore cursor position
 ; input:
@@ -341,26 +347,32 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;           X : cursor column (if carry = 1)
 ;           Y : cursor row (if carry = 1)
 ;
-!addr   kernal_plot     = $fff0
+.kernal_plot            = $fff0
 
 ; fetch CIA1 base address
 ; output:
 ;       X/Y : CIA1 base address ($DC00)
 ;
-!addr   kernal_iobase   = $fff3
+.kernal_iobase          = $fff3
+
+}
 
 ; address space:
 ;===============================================================================
-!addr   zp              = $00
-!addr   stack           = $0100
-!addr   work            = $0200
-!addr   vector          = $0300
-!addr   screen          = $0400
-!addr   vic             = $d000
-!addr   sid             = $d400
-!addr   vic_color       = $d800
-!addr   cia1            = $dc00
-!addr   cia2            = $dd00
+!addr {
+
+.zp                     = $00
+.stack                  = $0100
+.work                   = $0200
+.vector                 = $0300
+.screen                 = $0400
+.vic                    = $d000
+.sid                    = $d400
+.vic_color              = $d800
+.cia1                   = $dc00
+.cia2                   = $dd00
+
+}
 
 ; VIC-II registers:
 ;-------------------------------------------------------------------------------
