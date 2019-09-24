@@ -83,16 +83,17 @@
 ;;; temporary stack pointer of the frozen stack i.e. a focus cursor, and not the
 ;;; origanl stack pointer at time of freeze nor the current system stack pointer
 ;;!addr   zp_sp           = $02
-;;; address of the frozen stack, for indexing
-;;!addr   zp_stack        = $03
-;;!addr   zp_stack_lo     = $03
-;;!addr   zp_stack_hi     = $04
 
 ; address pointer used for printing memory values
 ; e.g. display the memory hexdump
-.zp_addr                = $05
-.zp_addr_lo             = $05
-.zp_addr_hi             = $06
+.zp_addr                = $03
+.zp_addr_lo             = $03
+.zp_addr_hi             = $04
+;;; as above, but tracks the "real" address
+;;; rather than the virtual one
+;;.zp_real                = $05
+;;.zp_real_lo             = $05
+;;.zp_real_hi             = $06
 
 ;-------------------------------------------------------------------------------
 ; address for string indexing
@@ -189,8 +190,8 @@ bsod_irq:
 ;
 bsod_freeze:
         ;-----------------------------------------------------------------------
-        ; we do not know if decimal mode was in use,
-        ; turn it off before we do any math
+        ; we do not know if decimal mode was in use, turn it off before
+        ; we do any math (this is a hardware-flaw with the NMOS 6502)
         cld
         ; get the stack pointer
         tsx
@@ -395,11 +396,16 @@ bsod_freeze:
         lda # $ff               ; use $FF for BRK
 +       sta .bsod_is_brk        ; we can easily refer to this in the future
         
-        ; copy the original program
-        ; counter to a working copy
+        ; copy the original program counter to a working copy
+        ; and add 1 to show the actual resume point in code
+        ; (the 6502 auto-increments the PC upon RTS/RTI)
+        ;
+        clc
         lda orig_pc_lo
+        adc # 1
         sta .bsod_pc_lo
         lda orig_pc_hi
+        adc # 0
         sta .bsod_pc_hi
 
         ; WARNING: the program counter on the stack will be 'off' by a
@@ -420,9 +426,9 @@ bsod_freeze:
         ; which always sets the BRK-bit
         ;
         bit .bsod_is_jsr        ; invoked by JSR and not an interrupt?
-        bpl +                   ; skip over BRK-handling of PC
+        bmi +                   ; if yes, skip over BRK-handling of PC
         bit .bsod_is_brk        ; check the BRK state
-        bpl +                   ; bit 7 not set, this is not a BRK call
+        bpl +                   ; skip if not a BRK call
 
         ; BRK call: fix the program
         ; counter by subtracting 2
@@ -432,14 +438,10 @@ bsod_freeze:
         sta .bsod_pc_lo
         bcs +
         dec .bsod_pc_hi
-
-        ; add one to the working program counter
-        ; to show the actual resume point in code
-+       inc .bsod_pc_lo
-        bne +
-        inc .bsod_pc_hi
 +
-        ; set the memory cursor on that address,
+        ; configure debugger:
+        ;-----------------------------------------------------------------------
+        ; set the memory cursor on the frozen program counter,
         ; i.e. the memory viewer window will be focused on the freeze-point
         lda .bsod_pc_lo
         sta .bsod_memaddr_lo
@@ -478,7 +480,7 @@ bsod_redraw:
 
         ; write the menu on the bottom of the screen
         !byte   .STR_KEYPOS, 24, 0
-        !pet    .PET_F1, "CPU+RAM ", .STR_KEY
+        !pet    .PET_F1, "RAM ", .STR_KEY
         !pet    .PET_F3, "VIC ", .STR_KEY
         !pet    .PET_F5, "DISK"
         ; registers title
