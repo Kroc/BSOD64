@@ -241,20 +241,16 @@ bsod_freeze:
         ;
         lda .zp+0               ; current CPU data-direction register
         sta orig_cpu_ddir       ; backup within BSOD64's code-area
-        lda # %00100111         ; allow writes to motor and memory layout
-        sta .zp+0
+        lda # %00101111         ; reset the data-direction register,
+        sta .zp+0               ; to its default value
         lda .zp+1               ; current CPU port value
-        sta orig_cpu_port       ; backup
-        ;     %--0-----         = Datasette motor off
+        sta orig_cpu_port       ; backup within BSOD64's code-area
+        ;     %--11----         = Datasette motor & buttons off
         ;     %-----1--         = use I/O instead of char ROM
         ;     $------00         = I/O, KERNAL and BASIC ROMs off
-        lda # %00000100
+        lda # %00110100
         sta .zp+1
-        ; now disable writes to the tape motor
-        ; until we need to defrost the machine
-        lda # %00000011         ; allow only memory-layout changes
-        sta .zp+0               ; write to data-direction register
-
+        
         ; backup the low four pages of memory
         ldx # 0
         ; backup the zero-page
@@ -336,7 +332,7 @@ bsod_freeze:
 
         ; reset machine state:
         ;-----------------------------------------------------------------------
-        lda # %00000111         ; enable BASIC,
+        lda # %00110111         ; enable BASIC,
         sta .zp+1               ; KERNAL & I/O
 
         ; this KERNAL routine erases pages 0, 1, & 2, runs a memory test,
@@ -369,24 +365,36 @@ bsod_freeze:
         ; put handlers in place for interrupts whenever we turn off the KERNAL
         ;
         sei                     ; first, disable interrupts
-        lda # %00000000         ; turn off KERNAL,
-        sta .zp+1               ; BASIC, and I/O
+
         ; install the NMI handler
-        lda #< bsod_nmi_handler
+        ;;lda #< bsod_nmi_kernalon
+        ;;sta .vectors+VECTOR_NMI+0
+        ;;lda #> bsod_nmi_kernalon
+        ;;sta .vectors+VECTOR_NMI+1
+
+        lda #< bsod_nmi_nokernal
         sta .cpu_nmi_lo
-        lda #> bsod_nmi_handler
+        lda #> bsod_nmi_nokernal
         sta .cpu_nmi_hi
+
         ; install the IRQ handler
-        lda #< bsod_irq_handler
+        ;;lda #< bsod_irq_kernalon
+        ;;sta .vectors+VECTOR_IRQ+0
+        ;;sta .vectors+VECTOR_BRK+0
+        ;;lda #> bsod_irq_kernalon
+        ;;sta .vectors+VECTOR_IRQ+1
+        ;;sta .vectors+VECTOR_BRK+1
+
+        lda #< bsod_irq_nokernal
         sta .cpu_irq_lo
-        lda #> bsod_irq_handler
+        lda #> bsod_irq_nokernal
         sta .cpu_irq_hi
+        
         ; enable interrupts and hope
         ; the machine doesn't crash
-        lda # %00000111         ; turn on KERNAL,
-        sta .zp+1               ; BASIC, and I/O
         cli                     ; enable interrupts
 
+        ;-----------------------------------------------------------------------
         ; make a note if BSOD64 was
         ; invoked by a BRK instruction
         ;
@@ -426,9 +434,9 @@ bsod_freeze:
         ; which always sets the BRK-bit
         ;
         bit .bsod_is_jsr        ; invoked by JSR and not an interrupt?
-        bmi +                   ; if yes, skip over BRK-handling of PC
+        bmi @debug              ; if yes, skip over BRK-handling of PC
         bit .bsod_is_brk        ; check the BRK state
-        bpl +                   ; skip if not a BRK call
+        bpl @debug              ; skip if not a BRK call
 
         ; BRK call: fix the program
         ; counter by subtracting 2
@@ -438,12 +446,15 @@ bsod_freeze:
         sta .bsod_pc_lo
         bcs +
         dec .bsod_pc_hi
-+
+
+        ; go display the crash-screen
++       jsr bsod_BSOD
+
         ; configure debugger:
         ;-----------------------------------------------------------------------
-        ; set the memory cursor on the frozen program counter,
-        ; i.e. the memory viewer window will be focused on the freeze-point
-        lda .bsod_pc_lo
+        ; set the memory cursor on the frozen program counter, i.e.
+        ; the memory viewer window will be focused on the freeze-point
+@debug: lda .bsod_pc_lo
         sta .bsod_memaddr_lo
         lda .bsod_pc_hi
         sta .bsod_memaddr_hi
@@ -631,6 +642,8 @@ bsod_redraw_flags:
         ;
         ldy # 32
         ldx # 3
+        jsr bsod_set_cursor
+
         lda .bsod_f
         sec
         jsr bsod_print_bin8
@@ -689,7 +702,7 @@ bsod_redraw_banks:
         sbc # 1
         beq @print
 
-        ldy # 'B'
+        ldy # 'B'               ; use a "b" in banks A & B for BASIC on
         sty @b+1
 
 @print:
@@ -849,8 +862,8 @@ bsod_get_frzn:
         cmp #> .screen
         bcs +                   ; if address > $04FF then return actual RAM
 
-        ; the address is within low-RAM, redirect the address
-        ; to the frozen copy in high-RAM
+        ; if the address is within low-RAM then
+        ; redirect the address to the frozen copy in high-RAM
         clc
         adc #> .frzn
 
@@ -859,12 +872,12 @@ bsod_get_frzn:
         sta @addr+1             ; set address lo-byte to read
 
         sei                     ; disable interrupts
-        ldx # %00000000         ; turn off BASIC,
+        ldx # %00110100         ; turn off BASIC,
         stx .zp+1               ; KERNAL, and I/O
 
 @addr   lda .null_addr          ; read the RAM address
 
-        ldx # %00000111         ; turn on KERNAL,
+        ldx # %00110111         ; turn on KERNAL,
         stx .zp+1               ; BASIC, and I/O
         cli                     ; enable interrupts
 
@@ -883,7 +896,7 @@ bsod_print_hex16:
         jmp bsod_print_hex8
 
 ;===============================================================================
-; print a byte as PETSCII hexadecimal:
+; print a byte as PETSCII hexadecimal at a given screen row/column:
 ;
 ;       A = byte value
 ;       X = screen row
@@ -892,11 +905,16 @@ bsod_print_hex16:
 bsod_print_hex8_pos:
         ;-----------------------------------------------------------------------
         pha                     ; put aside original value
-
         jsr bsod_set_cursor     ; position the cursor
-        
         pla                     ; retrieve original value
 
+;===============================================================================
+; print a byte as PETSCII hexadecimal:
+;
+;       A = byte value
+;
+;       X, Y are preserved
+;
 bsod_print_hex8:
         ;-----------------------------------------------------------------------
         stx @x+1                ; preserve X-register
@@ -922,8 +940,9 @@ bsod_print_hex8:
         iny
 
         cld                     ; disable decimal mode
-@x      ldx # .NULL_VALUE
-@y      ldy # .NULL_VALUE
+@x      ldx # .NULL_VALUE       ; restore X register
+@y      ldy # .NULL_VALUE       ; restore Y register
+
         rts
 
 ;===============================================================================
@@ -937,17 +956,10 @@ bsod_print_hex8:
 ;
 bsod_print_bin8:
         ;-----------------------------------------------------------------------
-        php                     ; put aside input carry state
-        pha                     ; put aside original value
-
-        jsr bsod_set_cursor     ; position the cursor
-
         ldy # 8                 ; print 8-bits
-        pla                     ; retrieve original value
 
         ; check the carry state. if carry is set binary
         ; digits will be printed as "-" = 0 and "*" = 1
-        plp                     ; retrieve input carry state
         bcs @sym                ; carry set = use symbols
 
         ; print "0" & "1" digits
@@ -1237,20 +1249,175 @@ bsod_init:
         rts
 
 ;===============================================================================
-; whenever we have to turn the KERNAL off, there needs to be an IRQ handler
-; in place to avoid crashing
+; interrutp handlers:
 ;
-bsod_irq_handler:
+; when the KERNAL ROM is switched on, it controls the interrupt vectors at
+; $FFFA-$FFFF. this means that there's some extra indirection that happens
+; whenever an IRQ occurs. first, the KERNAL pushes A, X & Y onto the stack
+; and then calls the vector at $0314; by default this is the routine that
+; handles the BASIC interrupt, e.g. blinking the cursor. if the KERNAL is
+; on but BASIC is off, the system will crash!
+;
+; unless you are writing a BASIC extension there is no reason to keep BASIC
+; switched on (you can use the RAM underneath instead), therefore we must
+; provide a routine to replace the BASIC interrupt. it doesn't have to do
+; any actual work, just merely exit in the correct way, that is, restore
+; the register from the stack and call `rti`. alternatively, one can jump
+; to $EA81 which is the KERNAL's code to do the same, but I recommend
+; against this because that assumes that the machine is a C64 with
+; stock ROMs and this might not be the case!
+;
+bsod_irq_kernalon:
         ;-----------------------------------------------------------------------
+        ; pull the registers from the stack
+        ; (in reverse order)
+        pla                     ; pull...
+        tay                     ; ...Y
+        pla                     ; pull...
+        tax                     ; ...X
+        pla                     ; pull A
+
+bsod_irq_nokernal:
+        ;-----------------------------------------------------------------------
+        ; return from interrupt
+        ; (restore processor flags, enable interrupts)
+        rti
+
+; likewise, without the KERNAL, the RAM underneath
+; will determine the NMI handler (the RESTORE key)
+;
+bsod_nmi_kernalon:
+        ;-----------------------------------------------------------------------
+        ; pull the registers from the stack
+        ; (in reverse order)
+        pla                     ; pull...
+        tay                     ; ...Y
+        pla                     ; pull...
+        tax                     ; ...X
+        pla                     ; pull A
+
+bsod_nmi_nokernal:
+        ;-----------------------------------------------------------------------
+        ; return from interrupt
+        ; (restore processor flags, enable interrupts)
         rti
 
 ;===============================================================================
-; likewise, without the KERNAL, the RAM underneath will determine the NMI
-; handler (the RESTORE key)
 ;
-bsod_nmi_handler:
+bsod_BSOD:
         ;-----------------------------------------------------------------------
-        rti
+        ; print the "BSOD"
+        ;
+        jsr bsod_print_str_inline
+        !pet    .PET_WHITE      ; set text-colour
+        !pet    .PET_CLR        ; clear the screen
+        !pet    .PET_UCASE      ; switch to upper-case
+        !pet    .PET_CASEOFF    ; disable case-switching via SHIFT+C=
+        ; print the sad face:
+        !pet    $20, $20, $6e, .PET_RETURN
+        !pet    $71, $20, $a5, .PET_RETURN
+        !pet    $20, $20, $a5, .PET_RETURN
+        !pet    $71, $20, $a5, .PET_RETURN
+        !pet    $20, $20, $6d, .PET_RETURN
+        !pet    .PET_RETURN, .PET_RETURN
+        !pet    "break at $"
+        !pet    .STR_END
+        
+        lda .bsod_pc_hi
+        ldx .bsod_pc_lo
+        jsr bsod_print_hex16
+
+        jsr bsod_print_str_inline
+        !pet    .PET_RETURN
+        !pet    .PET_RETURN, .PET_RETURN
+        !byte   .STR_END
+
+        ; print error message?
+        ;-----------------------------------------------------------------------
+        ; check for an error message following the BRK:
+        ;
+        ; to idenitfy the bytes following the BRK as an error message, and not
+        ; code, we check for a signature byte that could *not* be code, i.e.
+        ; an illegal instruction
+        ;
+        ; when we read back the bytes following the frozen program counter,
+        ; they could be underneath the BASIC or KERNAL ROM!
+        ;
+        sei                     ; disable interrupts
+        lda # %00110100         ; turn off BASIC,
+        sta .zp+1               ; KERNAL & I/O
+
+        ; copy the frozen program counter
+        ; into the zero-page for indexing
+        lda .bsod_pc_lo
+        sta .zp_str_lo
+        lda .bsod_pc_hi
+        sta .zp_str_hi
+
+        ; read the first byte following the BRK
+        ldy # 0
+        lda (.zp_str), y
+        iny
+
+        ; we use $42 as our marker specifically because, whilst it causes a
+        ; crash on a 6502 (and therefore can't be mistaken for code following
+        ; the BRK), it is reserved on the 65C02 & 65816 as "WDM", an escape-
+        ; code for future expansions and shouldn't occur in practice when it
+        ; comes to Commodore systems (e.g. Super-CPU)
+        ;
+        cmp # $42               ; is the byte following the BRK, $42?
+        bne @nomsg              ; if not, skip over printing error message
+
+-       lda (.zp_str), y        ; read a character from the string
+        beq +                   ; if $00, stop printing
+
+        ldx # %00110111         ; turn on I/O,
+        stx .zp+1               ; KERNAL & BASIC
+
+        jsr .kernal_chrout      ; print the character
+        
+        ldx # %00110100         ; turn off BASIC,
+        stx .zp+1               ; KERNAL & I/O
+        
+        iny                     ; move to next character
+        bne -                   ; (stops printing after 255 characters)
+
++       ; print CPU status:
+        ;-----------------------------------------------------------------------
+@nomsg: lda # %00110111         ; turn on I/O,
+        sta .zp+1               ; BASIC & KERNAL
+        cli                     ; enable interrupts
+
+        jsr bsod_print_str_inline_pos
+        !byte   20, 0
+        !pet    .PET_WHITE      ; (error message may have changed the colour)
+        !pet    "a:$   x:$   y:$   sp:$"
+        !pet    .PET_RETURN, .PET_RETURN
+        !pet    "nv-bdizc", .PET_RETURN
+        !byte   .STR_END
+
+        ; print status flags
+        lda orig_f
+        sec
+        jsr bsod_print_bin8
+
+        ; print register values
+        ldx # 20
+        ldy # 3
+        lda orig_a
+        jsr bsod_print_hex8_pos
+        ldy # 9
+        lda orig_x
+        jsr bsod_print_hex8_pos
+        ldy # 15
+        lda orig_y
+        jsr bsod_print_hex8_pos
+        ldy # 22
+        lda orig_sp
+        jsr bsod_print_hex8_pos
+
+        jmp *
+        rts
 
 ;===============================================================================
 ; BSOD64's backup of some C64 state at the point of BRK / NMI.
@@ -1299,11 +1466,8 @@ orig_irq_lo:
 orig_irq_hi:
         !byte   .NULL_VALUE
 
-
 ;===============================================================================
 bsod_defrost:
         ;-----------------------------------------------------------------------
-        ; the "Return From Interrupt" will pull the processor status
-        ; and return address from the stack
-        rti
+        rts
 }

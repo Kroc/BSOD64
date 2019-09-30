@@ -51,6 +51,7 @@
 .PET_LTGREY             = $9b
 
 .PET_CLR                = $93   ; clear screen
+.PET_UCASE              = $8e   ; switch to upper-case
 .PET_LCASE              = $0e   ; switch to lower-case
 .PET_CASEOFF            = $08   ; disable SHIFT+C= to switch cases
 
@@ -65,6 +66,14 @@
 .PET_F6                 = $8a
 .PET_F7                 = $8b
 .PET_F8                 = $8c
+
+.PET_CRSR_UP            = $91   ; move the cursor up a row!
+.PET_CRSR_DN            = $11   ; move the cursor down a row!
+.PET_CRSR_LT            = $9d   ; move the cursor left a column!
+.PET_CRSR_RT            = $1d   ; move the cursor right a column!
+
+.PET_SPC                = $20
+.PET_RETURN             = $0d
 
 ; KERNAL/BASIC:
 ;===============================================================================
@@ -348,6 +357,9 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ;           Y : cursor row (if carry = 1)
 ;
 .kernal_plot            = $fff0
+
+.zp_kernal_row          = $d6
+.zp_kernal_col          = $d3
 
 ; fetch CIA1 base address
 ; output:
