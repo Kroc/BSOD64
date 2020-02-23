@@ -38,9 +38,9 @@
 .frzn_stack             = $d100 ; backup of stack ($0100-$1FF)
 .frzn_work              = $d200 ; backup of KERNAL work-RAM ($0200-$02FF)
 .frzn_vectors           = $d300 ; backup of KERNAL/BASIC vectors ($0300-$03FF)
-.frzn_screen            = $d400 ; backup of text screen ($0400-$04FF)
-.frzn_vic               = $d500 ; backup of VIC-II registers (46-bytes)
-.frzn_color             = $d800 ; backup of colour RAM
+.frzn_screen            = $d400 ; backup of text screen ($0400-$07FF)
+.frzn_color             = $d800 ; backup of colour RAM ($D800-$DBFF)
+.frzn_vic               = $dc00 ; backup of VIC-II registers (46-bytes)
 
 ;-------------------------------------------------------------------------------
 ; depending on how BSDO64 is invoked, different actions
@@ -251,7 +251,7 @@ bsod_freeze:
         lda # %00110100
         sta .zp+1
         
-        ; backup the low four pages of memory
+        ; backup the low eight pages of memory
         ldx # 0
         ; backup the zero-page
 -       lda .zp, x
@@ -266,9 +266,15 @@ bsod_freeze:
         ; backup the KERNAL/BASIC vectors at $0300-$03FF
         lda .vector, x
         sta .frzn_vectors, x
-        ; backup the original text screen at $0400-$04FF
-        lda .screen, X
-        sta .frzn_screen, x
+        ; backup the original text screen at $0400-$07FF
+        lda .screen+$000, x
+        sta .frzn_screen+$000, x
+        lda .screen+$100, x
+        sta .frzn_screen+$100, x
+        lda .screen+$200, x
+        sta .frzn_screen+$200, x
+        lda .screen+$300, x
+        sta .frzn_screen+$300, x
         ; rinse and repeat
         dex
         bne -
@@ -475,37 +481,37 @@ bsod_redraw:
         ; print the static elements of the screen
         ; (title, legends, key-commands etc)
         jsr bsod_print_str_inline
-        ; configure screen + PETSCII
-        !pet    .PET_CLR        ; clear the screen
-        !pet    .PET_LCASE      ; switch to lower-case
-        !pet    .PET_CASEOFF    ; disable case-switching via SHIFT+C=
-        ; BSOD64 title
-        !pet    .PET_CYAN, "BSOD64v0.0"
-        !pet    .PET_GREEN
-        ; registers legend
-        !pet    .STR_POS, 2, 18, "PC:  A: X: Y:"
-        ; flags legend "nv-bdiz"
-        !pet    .STR_POS, 2, 32, "nv-bdizc"
-        ; banks legend
-        !pet    .STR_POS, 2, 9, "89ABCDEF"
+            ; configure screen + PETSCII
+            !pet    .PET_CLR        ; clear the screen
+            !pet    .PET_LCASE      ; switch to lower-case
+            !pet    .PET_CASEOFF    ; disable case-switching via SHIFT+C=
+            ; BSOD64 title
+            !pet    .PET_CYAN, "BSOD64v0.0"
+            !pet    .PET_GREEN
+            ; registers legend
+            !pet    .STR_POS, 2, 18, "PC:  A: X: Y:"
+            ; flags legend "nv-bdiz"
+            !pet    .STR_POS, 2, 32, "nv-bdizc"
+            ; banks legend
+            !pet    .STR_POS, 2, 9, "89ABCDEF"
 
-        ; write the menu on the bottom of the screen
-        !byte   .STR_KEYPOS, 24, 0
-        !pet    .PET_F1, "RAM ", .STR_KEY
-        !pet    .PET_F3, "VIC ", .STR_KEY
-        !pet    .PET_F5, "DISK"
-        ; registers title
-        !pet    .STR_KEYPOS, 0, 18, "R", "REGISTERS"
-        ; flags title
-        !pet    .STR_KEYPOS, 0, 32, "F", "FLAGS"
-        ; stack title
-        !pet    .STR_KEYPOS, 5, 32, "S", "STACK"
-        ; banks title
-        !pet    .STR_KEYPOS, 2, 0, "B", "BANKS"
-        ; memory viewer title
-        !byte   .STR_KEYPOS, 5, 0
-        !pet    "M", "MEMORY ", .STR_KEY
-        !pet    "G", "GOTO", .STR_END
+            ; write the menu on the bottom of the screen
+            !byte   .STR_KEYPOS, 24, 0
+            !pet    .PET_F1, "RAM ", .STR_KEY
+            !pet    .PET_F3, "VIC ", .STR_KEY
+            !pet    .PET_F5, "DISK"
+            ; registers title
+            !pet    .STR_KEYPOS, 0, 18, "R", "REGISTERS"
+            ; flags title
+            !pet    .STR_KEYPOS, 0, 32, "F", "FLAGS"
+            ; stack title
+            !pet    .STR_KEYPOS, 5, 32, "S", "STACK"
+            ; banks title
+            !pet    .STR_KEYPOS, 2, 0, "B", "BANKS"
+            ; memory viewer title
+            !byte   .STR_KEYPOS, 5, 0
+            !pet    "M", "MEMORY ", .STR_KEY
+            !pet    "G", "GOTO", .STR_END
 
         ; draw the lines across the screen
         ldx # 39
@@ -524,9 +530,10 @@ bsod_redraw:
         ; draw the box for how BSOD64 was invoked:
         ; prepare the screen position / colour
         jsr bsod_print_str_inline_pos
-        !byte   0, 14
-        !pet    .PET_LTRED, .PET_RVSON
-        !pet    .STR_END
+            !byte   0, 14
+            !pet    .PET_LTRED, .PET_RVSON
+            !pet    .STR_END
+        
         ; JSR overrides all other possibilities because the use of PHP
         ; to capture the processor flags when invoking by JSR causes
         ; the BRK bit to always be set
@@ -534,7 +541,7 @@ bsod_redraw:
         bpl +
         ; JSR:
         jsr bsod_print_str_inline
-        !pet    "JSR", .STR_END
+            !pet    "JSR", .STR_END
         bcc @data               ; (always branches)
 
         ; check the break-bit
@@ -542,17 +549,17 @@ bsod_redraw:
         bpl +
         ; BRK:
         jsr bsod_print_str_inline
-        !pet    "BRK", .STR_END
+            !pet    "BRK", .STR_END
         bcc @data                              ; (always branches)
         
 +       ;IRQ:
         jsr bsod_print_str_inline
-        !pet    "IRQ", .STR_END
+            !pet    "IRQ", .STR_END
 
         ; set the colour ready for filling in the data
 @data:  jsr bsod_print_str_inline
-        !pet    .PET_RVSOFF
-        !pet    .PET_LTBLUE, .STR_END
+            !pet    .PET_RVSOFF
+            !pet    .PET_LTBLUE, .STR_END
 
         ; redraw the various windows' data
         jsr bsod_redraw_registers
@@ -682,7 +689,7 @@ bsod_redraw_banks:
         ;
         lda #< .zp+1
         ldx #> .zp+1
-        jsr bsod_get_frzn       ; read "$0001" from the frozen state ($F001)
+        jsr bsod_get_frzn       ; read "$0001" from the frozen state ($D001)
         and # %00000011         ; we only care about the bottom bits
         beq @print              ; %00 = all RAM, nothing else
 
@@ -735,8 +742,9 @@ bsod_redraw_stack:
         ldy .bsod_sp
 
 -       jsr bsod_print_str_inline_pos
-@line   !byte   7, 32
-        !pet    .PET_PURPLE, .STR_END
+@line       !byte   7, 32
+            !pet    .PET_PURPLE, .STR_END
+        
         ; is this line the top of the stack at freeze-time?
         cpy .bsod_sp
         bne +
@@ -746,12 +754,12 @@ bsod_redraw_stack:
 +       lda # " "
         jsr .kernal_chrout
         jsr bsod_print_str_inline
-        !pet    .PET_GREEN, "1", .STR_END
+            !pet    .PET_GREEN, "1", .STR_END
         tya
         jsr bsod_print_hex8
 
         jsr bsod_print_str_inline
-        !pet    .PET_LTBLUE, " ", .STR_END
+            !pet    .PET_LTBLUE, " ", .STR_END
 
         sei                     ; disable interrupts
         dec .zp+1               ; turn off BASIC,
@@ -809,8 +817,8 @@ bsod_print_hexline:
 
         ; print the gutter
         jsr bsod_print_str_inline
-        !pet    .PET_GREEN, "  $"
-        !byte   .STR_END
+            !pet    .PET_GREEN, "  $"
+            !byte   .STR_END
 
         ; print the memory address
         lda .zp_addr_hi
@@ -842,7 +850,7 @@ bsod_print_hexline:
 
 ;===============================================================================
 ; read the value of an address from the frozen state:
-; i.e. redirect addresses $0000-$04FF to $D000-$D4FF
+; i.e. redirect addresses $0000-$07FF to $D000-$D7FF
 ; (also this must always read RAM and not I/O or ROM)
 ;
 ;       A = original address lo-byte
@@ -859,8 +867,8 @@ bsod_get_frzn:
         ; the lower four pages of the machine
         ; were backed up and now stored elsewhere
         txa
-        cmp #> .screen
-        bcs +                   ; if address > $04FF then return actual RAM
+        cmp #> .screen+$400
+        bcs +                   ; if address > $07FF then return actual RAM
 
         ; if the address is within low-RAM then
         ; redirect the address to the frozen copy in high-RAM
@@ -927,7 +935,7 @@ bsod_print_hex8:
         lsr                     ; ...
         lsr                     ; ...
         lsr                     ; ...
-        cmp #9+1
+        cmp # 9+1
         adc # $30               ; rebase to PETSCII '0' and above
         jsr .kernal_chrout
         iny
@@ -1249,7 +1257,7 @@ bsod_init:
         rts
 
 ;===============================================================================
-; interrutp handlers:
+; interrupt handlers:
 ;
 ; when the KERNAL ROM is switched on, it controls the interrupt vectors at
 ; $FFFA-$FFFF. this means that there's some extra indirection that happens
@@ -1309,28 +1317,28 @@ bsod_BSOD:
         ; print the "BSOD"
         ;
         jsr bsod_print_str_inline
-        !pet    .PET_WHITE      ; set text-colour
-        !pet    .PET_CLR        ; clear the screen
-        !pet    .PET_UCASE      ; switch to upper-case
-        !pet    .PET_CASEOFF    ; disable case-switching via SHIFT+C=
-        ; print the sad face:
-        !pet    $20, $20, $6e, .PET_RETURN
-        !pet    $71, $20, $a5, .PET_RETURN
-        !pet    $20, $20, $a5, .PET_RETURN
-        !pet    $71, $20, $a5, .PET_RETURN
-        !pet    $20, $20, $6d, .PET_RETURN
-        !pet    .PET_RETURN, .PET_RETURN
-        !pet    "break at $"
-        !pet    .STR_END
+            !pet    .PET_WHITE      ; set text-colour
+            !pet    .PET_CLR        ; clear the screen
+            !pet    .PET_UCASE      ; switch to upper-case
+            !pet    .PET_CASEOFF    ; disable case-switching via SHIFT+C=
+            ; print the sad face:
+            !pet    $20, $20, $6e, .PET_RETURN
+            !pet    $71, $20, $a5, .PET_RETURN
+            !pet    $20, $20, $a5, .PET_RETURN
+            !pet    $71, $20, $a5, .PET_RETURN
+            !pet    $20, $20, $6d, .PET_RETURN
+            !pet    .PET_RETURN, .PET_RETURN
+            !pet    "break at $"
+            !pet    .STR_END
         
         lda .bsod_pc_hi
         ldx .bsod_pc_lo
         jsr bsod_print_hex16
 
         jsr bsod_print_str_inline
-        !pet    .PET_RETURN
-        !pet    .PET_RETURN, .PET_RETURN
-        !byte   .STR_END
+            !pet    .PET_RETURN
+            !pet    .PET_RETURN, .PET_RETURN
+            !byte   .STR_END
 
         ; print error message?
         ;-----------------------------------------------------------------------
@@ -1389,12 +1397,12 @@ bsod_BSOD:
         cli                     ; enable interrupts
 
         jsr bsod_print_str_inline_pos
-        !byte   20, 0
-        !pet    .PET_WHITE      ; (error message may have changed the colour)
-        !pet    "a:$   x:$   y:$   sp:$"
-        !pet    .PET_RETURN, .PET_RETURN
-        !pet    "nv-bdizc", .PET_RETURN
-        !byte   .STR_END
+            !byte   20, 0
+            !pet    .PET_WHITE      ; (error message may have changed colour)
+            !pet    "a:$   x:$   y:$   sp:$"
+            !pet    .PET_RETURN, .PET_RETURN
+            !pet    "nv-bdizc", .PET_RETURN
+            !byte   .STR_END
 
         ; print status flags
         lda orig_f
