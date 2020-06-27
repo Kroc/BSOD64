@@ -33,6 +33,8 @@ hi                      = $01
 .VIC_LTBLUE             = $0e   ; %1110
 .VIC_LTGREY             = $0f   ; %1111
 
+; PETSCII codes:
+;
 .PET_STOP               = $03
 
 .PET_BLACK              = $90
@@ -56,6 +58,7 @@ hi                      = $01
 .PET_UCASE              = $8e   ; switch to upper-case
 .PET_LCASE              = $0e   ; switch to lower-case
 .PET_CASEOFF            = $08   ; disable SHIFT+C= to switch cases
+.PET_CASEON             = $09   ; enable SHIFT+C= to switch cases
 
 .PET_RVSON              = $12
 .PET_RVSOFF             = $92
@@ -115,259 +118,299 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 ; clear screen; set PAL/NTSC switch and interrupt timer
 ;
 .kernal_scinit          = $ff81
+.kernal_scinit_addr     = $ff5b
 
 ; initialize CIA's, SID volume; setup memory configuration;
 ; set and start interrupt timer
 ;
 .kernal_ioinit          = $ff84
+.kernal_ioinit_addr     = $fda3
 
 ; clear memory addresses $0002-$0101 and $0200-$03FF; run memory test
 ; and set start and end address of BASIC work area accordingly;
 ; set screen memory to $0400 and datasette buffer to $033C
 ;
 .kernal_ramtas          = $ff87
+.kernal_ramtas_addr     = $fd50
 
 ; fill vector table at memory addresses $0314-$0333 with default values
 ;
 .kernal_restor          = $ff8a
+.kernal_restor_addr     = $fd15
 
 ; copy vector table at memory addresses $0314-$0333 from or into user table.
-; input:
-;       carry : 0 = copy user table into vector table
+;
+; in:     carry 0 = copy user table into vector table
 ;               1 = copy vector table into user table
-;         X/Y : pointer to user table
+;         X/Y   pointer to user table
 ;
 .kernal_vector          = $ff8d
+.kernal_vector_addr     = $fd1a
 
 ; set system error display switch at memory address $009D
-; input:
-;       A : switch value
+;
+; in:   A       switch value
 ;
 .kernal_setmsg          = $ff90
+.kernal_setmsg_addr     = $fe18
 
 ; send `LISTEN` secondary address to serial bus.
 ; (must call `LISTEN` beforehand)
-; input:
-;       A : secondary address.
+;
+; in:   A       secondary address.
 ;
 .kernal_lstnsa          = $ff93
+.kernal_lstnsa_addr     = $edb9
 
 ; send `TALK` secondary address to serial bus.
 ; (must call `TALK` beforehand)
-; input:
-;       A : secondary address
+;
+; in:   A       secondary address
 ;
 .kernal_talksa          = $ff96
+.kernal_talksa_addr     = $edc7
 
 ; save or restore start address of BASIC work area
-; input:
-;       carry : 0 = restore from input
+;
+; in:   carry   0 = restore from input
 ;               1 = save to output
-;         X/Y : address (if carry = 0)
-; output:
-;         X/Y : address (if carry = 1)
+;       X/Y     address (if carry = 0)
+;
+; out:  X/Y     address (if carry = 1)
 ;
 .kernal_membot          = $ff99
+.kernal_membot_addr     = $fe25
 
 ; save or restore end address of BASIC work area
-; input:
-;       carry : 0 = restore from input
+;
+; in:   carry   0 = restore from input
 ;               1 = Save to output
-;         X/Y : address (if carry = 0)
-; output:
-;         X/Y : address (if carry = 1)
+;       X/Y     address (if carry = 0)
+;
+; out:  X/Y     address (if carry = 1)
 ;
 .kernal_memtop          = $ff9c
+.kernal_memtop_addr     = $fe34
 
 ; query keyboard; put current matrix code into memory address $00CB,
 ; current status of shift keys into memory address $028D and PETSCII
 ; code into keyboard buffer
 ;
 .kernal_scnkey          = $ff9f
+.kernal_scnkey_addr     = $ea87
 
-; unknown. (set serial bus timeout)
-; input:
-;       A : timeout value
+; set IEEE-bus time-out
+;
+; in:   A       timeout value
 ;
 .kernal_settmo          = $ffa2
+.kernal_settmo_addr     = $fe21
 
-; read byte from serial bus.
+; read byte from serial bus
 ; (must call `TALK` and `TALKSA` beforehand)
-; output:
-;       A : byte read
+;
+; out:  A       byte read
 ;
 .kernal_iecin           = $ffa5
+.kernal_iecin_addr      = $ee13
 
-; write byte to serial bus.
+; write byte to serial bus
 ; (must call `LISTEN` and `LSTNSA` beforehand)
-; input:
-;       A : byte to write
+;
+; in:   A       byte to write
 ;
 .kernal_iecout          = $ffa8
+.kernal_iecout_addr     = $eddd
 
 ; send `UNTALK` command to serial bus
 .kernal_untalk          = $ffab
+.kernal_untalk_addr     = $edef
 
 ; send `UNLISTEN` command to serial bus
 .kernal_unlstn          = $ffae
+.kernal_unlstn_addr     = $edfe
 
 ; send `LISTEN` command to serial bus
-; input:
-;       A : device number
+;
+; in:   A       device number
 ;
 .kernal_listen          = $ffb1
+.kernal_listen_addr     = $ed0c
 
 ; send `TALK` command to serial bus
-; input:
-;       A : device number
+;
+; in:   A       device number
 ;
 .kernal_talk            = $ffb4
+.kernal_talk_addr       = $ed09
 
 ; fetch status of current input/output device, value of `ST` variable
 ; (for RS232, status is cleared)
-; output:
-;       A : device status
+;
+; out:  A       device status
 ;
 .kernal_readst          = $ffb7
+.kernal_readst_addr     = $fe07
 
 ; set file parameters
-; input:
-;       A : logical number
-;       X : device number
-;       Y : secondary address
+;
+; in:   A       logical number
+;       X       device number
+;       Y       secondary address
 ;
 .kernal_setlfs          = $ffba
+.kernal_setlfs_addr     = $fe00
 
 ; set file name parameters
-; input:
-;         A : file name length
-;       X/Y : pointer to file name
+;
+; in:   A       file name length
+;       X/Y     pointer to file name
 ;
 .kernal_setnam          = $ffbd
+.kernal_setnam_addr     = $fdf9
 
 ; open file (must call `SETLFS` and `SETNAM` beforehand)
 .kernal_open            = $ffc0
+.kernal_open_addr       = $f34a
 
 ; close file
-; input:
-;       A : logical number
+;
+; in:   A       logical number
 ;
 .kernal_close           = $ffc3
+.kernal_close_addr      = $f291
 
 ; define file as default input
 ; (must call `OPEN` beforehand)
-; input:
-;       X : logical number
+;
+; in:   X       logical number
 ;
 .kernal_chkin           = $ffc6
+.kernal_chkin_addr      = $f20e
 
 ; define file as default output
 ; (must call `OPEN` beforehand)
-; input:
-;       X : logical number
+;
+; in:   X       logical number
 ;
 .kernal_chkout          = $ffc9
+.kernal_chkout_addr     = $f250
 
 ; close default input/output files (for serial bus, send `UNTALK` and/or
 ; `UNLISTEN`); restore default input/output to keyboard/screen
 .kernal_clrchn          = $ffcc
+.kernal_clrchn_addr     = $f333
 
 ; read byte from default input (for keyboard, read a line from the screen).
 ; (if not keyboard, must call `OPEN` and `CHKIN` beforehand)
-; output:
-;       A : byte read
+;
+; out:  A       byte read
 ;
 .kernal_chrin           = $ffcf
+.kernal_chrin_addr      = $f157
 
 ; write byte to default output
 ; (if not screen, must call `OPEN` and `CHKOUT` beforehand)
-; input:
-;       A : byte to write
+;
+; in:   A       byte to write
 ;
 .kernal_chrout          = $ffd2
+.kernal_chrout_addr     = $f1ca
+.kernal_chrout_scr      = $e716 ; (no device check, always write to screen)
 
 ; load or verify file. (must call `SETLFS` and `SETNAM` beforehand)
-; input:
-;           A : 0 = load, 1-255 = verify;
-;         X/Y : load address (if secondary address = 0)
-; output:
-;       carry : 0 = no errors, 1 = error
-;           A : KERNAL error code (if carry = 1)
-;         X/Y : address of last byte loaded/verified (if carry = 0)
+;
+; in:   A       0 = load, 1-255 = verify;
+;       X/Y     load address (if secondary address = 0)
+;
+; out:  carry   0 = no errors, 1 = error
+;       A       KERNAL error code (if carry = 1)
+;       X/Y     address of last byte loaded/verified (if carry = 0)
 ;
 .kernal_load            = $ffd5
+.kernal_load_addr       = $f49e
 
 ; save file. (must call `SETLFS` and `SETNAM` beforehand)
-; input:
-;           A : address of zero page register holding
+;
+; in:   A       address of zero page register holding
 ;               start address of memory area to save
-;         X/Y : End address of memory area plus 1.
-; output:
-;       carry : 0 = No errors, 1 = Error
-;           A : KERNAL error code (if carry = 1)
+;       X/Y     End address of memory area plus 1.
+;
+; out:  carry   0 = No errors, 1 = Error
+;       A       KERNAL error code (if carry = 1)
 ;
 .kernal_save            = $ffd8
+.kernal_save_addr       = $f5dd
 
 ; set Time of Day, at memory address $00A0-$00A2
-; input:
-;       A/X/Y : new TOD value
+;
+; in:   A/X/Y   new TOD value
 ;
 .kernal_settim          = $ffdb
+.kernal_settim_addr     = $f6e4
 
 ; read Time of Day, at memory address $00A0-$00A2
-; output:
-;       A/X/Y : current TOD value
+;
+; out:  A/X/Y   current TOD value
 ;
 .kernal_rdtim           = $ffde
+.kernal_rdtim_addr      = $f6dd
 
 ; query Stop key indicator, at memory address $0091;
 ; if pressed, call CLRCHN and clear keyboard buffer
-; output:
-;        zero : 0 = not pressed, 1 = pressed
-;       carry : 1 = pressed
+;
+; out:  zero    0 = not pressed, 1 = pressed
+;       carry   1 = pressed
 ;
 .kernal_stop            = $ffe1
+.kernal_stop_addr       = $f6ed
 
 ; read byte from default input
 ; (if not keyboard, must call `OPEN` and `CHKIN` beforehand)
-; output:
-;       A : byte read
+;
+; out:  A       byte read
 ;
 .kernal_getin           = $ffe4
+.kernal_getin_addr      = $f13e
 
 ; clear file table; call `CLRCHN`
 .kernal_clall           = $ffe7
+.kernal_clall_addr      = $f32f
 
 ; update Time of Day, at memory address $00A0-$00A2,
 ; and stop-key indicator, at memory address $0091
 .kernal_udtim           = $ffea
+.kernal_udtim_addr      = $f69b
 
 ; fetch number of screen rows and columns
-; output:
-;       X : number of columns (40)
-;       Y : number of rows (25)
+;
+; out:  X       number of columns (40)
+;       Y       number of rows (25)
 ;
 .kernal_screen          = $ffed
+.kernal_screen_addr     = $e505
 
 ; save or restore cursor position
-; input:
-;       carry : 0 = restore from input, 1 = save to output
-;           X : cursor column (if carry = 0)
-;           Y : cursor row (if carry = 0)
-; output:
-;           X : cursor column (if carry = 1)
-;           Y : cursor row (if carry = 1)
+;
+; in:   carry   0 = restore from input, 1 = save to output
+;       X       cursor column (if carry = 0)
+;       Y       cursor row (if carry = 0)
+;
+; out:  X       cursor column (if carry = 1)
+;       Y       cursor row (if carry = 1)
 ;
 .kernal_plot            = $fff0
+.kernal_plot_addr       = $e50a
 
 .zp_kernal_row          = $d6
 .zp_kernal_col          = $d3
 
 ; fetch CIA1 base address
-; output:
-;       X/Y : CIA1 base address ($DC00)
+;
+; out:  X/Y     CIA1 base address ($DC00)
 ;
 .kernal_iobase          = $fff3
+.kernal_iobase_addr     = $e500
 
 }
 
