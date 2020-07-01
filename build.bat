@@ -5,6 +5,7 @@ PUSHD %~dp0
 SET ACME="bin\acme\acme.exe"
 
 %ACME% -v1 ^
+    -l "bsod64.sym" ^
     --format cbm ^
      -Wtype-mismatch ^
       "bsod64.acme"

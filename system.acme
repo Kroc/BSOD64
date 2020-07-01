@@ -1,7 +1,7 @@
 ; definitions for the C64 hardware
 ;===============================================================================
-lo                      = $00
-hi                      = $01
+.lo                     = $00
+.hi                     = $01
 
 !macro  bit_skip1 {
         !byte $24
@@ -84,21 +84,21 @@ hi                      = $01
 ;===============================================================================
 !addr   .vectors        = $0314
 
-VECTOR_IRQ              = $00   ;=$0314/5
-VECTOR_BRK              = $02   ;=$0316/7
-VECTOR_NMI              = $04   ;=$0318/9
-VECTOR_OPEN             = $06   ;=$031a/b
-VECTOR_CLOSE            = $08   ;=$031c/d
-VECTOR_CHKIN            = $0a   ;=$031e/f
-VECTOR_CHKOUT           = $0c   ;=$0320/1
-VECTOR_CLRCHN           = $0e   ;=$0322/3
-VECTOR_CHRIN            = $10   ;=$0324/5
-VECTOR_CHROUT           = $12   ;=$0326/7
-VECTOR_STOP             = $14   ;=$0328/9
-VECTOR_GETIN            = $16   ;=$032a/b
-VECTOR_CLALL            = $18   ;=$032c/d
-VECTOR_LOAD             = $1c   ;=$0330/1
-VECTOR_SAVE             = $1e   ;=$0332/3
+.VECTOR_IRQ             = $00   ;=$0314/5
+.VECTOR_BRK             = $02   ;=$0316/7
+.VECTOR_NMI             = $04   ;=$0318/9
+.VECTOR_OPEN            = $06   ;=$031a/b
+.VECTOR_CLOSE           = $08   ;=$031c/d
+.VECTOR_CHKIN           = $0a   ;=$031e/f
+.VECTOR_CHKOUT          = $0c   ;=$0320/1
+.VECTOR_CLRCHN          = $0e   ;=$0322/3
+.VECTOR_CHRIN           = $10   ;=$0324/5
+.VECTOR_CHROUT          = $12   ;=$0326/7
+.VECTOR_STOP            = $14   ;=$0328/9
+.VECTOR_GETIN           = $16   ;=$032a/b
+.VECTOR_CLALL           = $18   ;=$032c/d
+.VECTOR_LOAD            = $1c   ;=$0330/1
+.VECTOR_SAVE            = $1e   ;=$0332/3
 
 !addr {
 
@@ -433,69 +433,69 @@ VECTOR_SAVE             = $1e   ;=$0332/3
 
 ; VIC-II registers:
 ;-------------------------------------------------------------------------------
-VIC_SPRITE0_X           = $00   ;=$D000
-VIC_SPRITE0_Y           = $01   ;=$D001
-VIC_SPRITE1_X           = $02   ;=$D002
-VIC_SPRITE1_Y           = $03   ;=$D003
-VIC_SPRITE2_X           = $04   ;=$D004
-VIC_SPRITE2_Y           = $05   ;=$D005
-VIC_SPRITE3_X           = $06   ;=$D006
-VIC_SPRITE3_Y           = $07   ;=$D007
-VIC_SPRITE4_X           = $08   ;=$D008
-VIC_SPRITE4_Y           = $09   ;=$D009
-VIC_SPRITE5_X           = $0a   ;=$D00A
-VIC_SPRITE5_Y           = $0b   ;=$D00B
-VIC_SPRITE6_X           = $0c   ;=$D00C
-VIC_SPRITE6_Y           = $0d   ;=$D00D
-VIC_SPRITE7_X           = $0e   ;=$D00E
-VIC_SPRITE7_Y           = $0f   ;=$D00F
-VIC_SPRITES_X           = $10   ;=$D010
-VIC_SCREEN_VERT         = $11   ;=$D011
-VIC_SCANLINE            = $12   ;=$D012
-VIC_LIGHTPEN_X          = $13   ;=$D013
-VIC_LIGHTPEN_Y          = $14   ;=$D014
-VIC_SPRITE_ENABLE       = $15   ;=$D015
-VIC_SCREEN_HORZ         = $16   ;=$D016
-VIC_SPRITE_XPAND_VERT   = $17   ;=$D017
-VIC_LAYOUT              = $18   ;=$D018
-VIC_IRQ_STATUS          = $19   ;=$D019
-VIC_IRQ_CONTROL         = $1a   ;=$D01A
-VIC_SPRITE_PRIORITY     = $1b   ;=$D01B
-VIC_SPRITE_MULTICOLOR   = $1c   ;=$D01C
-VIC_SPRITE_XPAND_HORZ   = $1d   ;=$D01D
-VIC_SPRITE_HIT_SPRITE   = $1e   ;=$D01E
-VIC_SPRITE_HIT_BKGRND   = $1f   ;=$D01F
-VIC_SCREEN_BORDER       = $20   ;=$D020
-VIC_SCREEN_BKGRND       = $21   ;=$D021
-VIC_SCREEN_BKGRND1      = $22   ;=$D022
-VIC_SCREEN_BKGRND2      = $23   ;=$D023
-VIC_SCREEN_BKGRND3      = $24   ;=$D024
-VIC_SPRITES_COLOR1      = $25   ;=$D025
-VIC_SPRITES_COLOR2      = $26   ;=$D026
-VIC_SPRITE0_COLOR       = $27   ;=$D027
-VIC_SPRITE1_COLOR       = $28   ;=$D028
-VIC_SPRITE2_COLOR       = $29   ;=$D029
-VIC_SPRITE3_COLOR       = $2a   ;=$D02A
-VIC_SPRITE4_COLOR       = $2b   ;=$D02B
-VIC_SPRITE5_COLOR       = $2c   ;=$D02C
-VIC_SPRITE6_COLOR       = $2d   ;=$D02D
-VIC_SPRITE7_COLOR       = $2e   ;=$D02E
+.VIC_SPRITE0_X          = $00   ;=$D000
+.VIC_SPRITE0_Y          = $01   ;=$D001
+.VIC_SPRITE1_X          = $02   ;=$D002
+.VIC_SPRITE1_Y          = $03   ;=$D003
+.VIC_SPRITE2_X          = $04   ;=$D004
+.VIC_SPRITE2_Y          = $05   ;=$D005
+.VIC_SPRITE3_X          = $06   ;=$D006
+.VIC_SPRITE3_Y          = $07   ;=$D007
+.VIC_SPRITE4_X          = $08   ;=$D008
+.VIC_SPRITE4_Y          = $09   ;=$D009
+.VIC_SPRITE5_X          = $0a   ;=$D00A
+.VIC_SPRITE5_Y          = $0b   ;=$D00B
+.VIC_SPRITE6_X          = $0c   ;=$D00C
+.VIC_SPRITE6_Y          = $0d   ;=$D00D
+.VIC_SPRITE7_X          = $0e   ;=$D00E
+.VIC_SPRITE7_Y          = $0f   ;=$D00F
+.VIC_SPRITES_X          = $10   ;=$D010
+.VIC_SCREEN_VERT        = $11   ;=$D011
+.VIC_SCANLINE           = $12   ;=$D012
+.VIC_LIGHTPEN_X         = $13   ;=$D013
+.VIC_LIGHTPEN_Y         = $14   ;=$D014
+.VIC_SPRITE_ENABLE      = $15   ;=$D015
+.VIC_SCREEN_HORZ        = $16   ;=$D016
+.VIC_SPRITE_XPAND_VERT  = $17   ;=$D017
+.VIC_LAYOUT             = $18   ;=$D018
+.VIC_IRQ_STATUS         = $19   ;=$D019
+.VIC_IRQ_CONTROL        = $1a   ;=$D01A
+.VIC_SPRITE_PRIORITY    = $1b   ;=$D01B
+.VIC_SPRITE_MULTICOLOR  = $1c   ;=$D01C
+.VIC_SPRITE_XPAND_HORZ  = $1d   ;=$D01D
+.VIC_SPRITE_HIT_SPRITE  = $1e   ;=$D01E
+.VIC_SPRITE_HIT_BKGRND  = $1f   ;=$D01F
+.VIC_SCREEN_BORDER      = $20   ;=$D020
+.VIC_SCREEN_BKGRND      = $21   ;=$D021
+.VIC_SCREEN_BKGRND1     = $22   ;=$D022
+.VIC_SCREEN_BKGRND2     = $23   ;=$D023
+.VIC_SCREEN_BKGRND3     = $24   ;=$D024
+.VIC_SPRITES_COLOR1     = $25   ;=$D025
+.VIC_SPRITES_COLOR2     = $26   ;=$D026
+.VIC_SPRITE0_COLOR      = $27   ;=$D027
+.VIC_SPRITE1_COLOR      = $28   ;=$D028
+.VIC_SPRITE2_COLOR      = $29   ;=$D029
+.VIC_SPRITE3_COLOR      = $2a   ;=$D02A
+.VIC_SPRITE4_COLOR      = $2b   ;=$D02B
+.VIC_SPRITE5_COLOR      = $2c   ;=$D02C
+.VIC_SPRITE6_COLOR      = $2d   ;=$D02D
+.VIC_SPRITE7_COLOR      = $2e   ;=$D02E
 
 ; CIA1+2 registers:
 ;-------------------------------------------------------------------------------
-CIA_PORTA               = $00   ;=$DC00/$DD00
-CIA_PORTB               = $01   ;=$DC01/$DD01
-CIA_PORTA_DDR           = $02   ;=$DC02/$DD02
-CIA_PORTB_DDR           = $03   ;=$DC03/$DD03
-CIA_TIMERA_LO           = $04   ;=$DC04/$DD04
-CIA_TIMERA_HI           = $05   ;=$DC05/$DD05
-CIA_TIMERB_LO           = $06   ;=$DC06/$DD06
-CIA_TIMERB_HI           = $07   ;=$DC07/$DD07
-CIA_TOD_TENTHS          = $08   ;=$DC08/$DD08
-CIA_TOD_SECS            = $09   ;=$DC09/$DD09
-CIA_TOD_MINS            = $0a   ;=$DC0A/$DD0A
-CIA_TOD_HOURS           = $0b   ;=$DC0B/$DD0B
-CIA_SHIFT               = $0c   ;=$DC0C/$DD0C
-CIA_IRQ                 = $0d   ;=$DC0D/$DD0D
-CIA_TIMERA              = $0e   ;=$DC0E/$DD0E
-CIA_TIMERB              = $0f   ;=$DC0F/$DD0F
+.CIA_PORTA              = $00   ;=$DC00/$DD00
+.CIA_PORTB              = $01   ;=$DC01/$DD01
+.CIA_PORTA_DDR          = $02   ;=$DC02/$DD02
+.CIA_PORTB_DDR          = $03   ;=$DC03/$DD03
+.CIA_TIMERA_LO          = $04   ;=$DC04/$DD04
+.CIA_TIMERA_HI          = $05   ;=$DC05/$DD05
+.CIA_TIMERB_LO          = $06   ;=$DC06/$DD06
+.CIA_TIMERB_HI          = $07   ;=$DC07/$DD07
+.CIA_TOD_TENTHS         = $08   ;=$DC08/$DD08
+.CIA_TOD_SECS           = $09   ;=$DC09/$DD09
+.CIA_TOD_MINS           = $0a   ;=$DC0A/$DD0A
+.CIA_TOD_HOURS          = $0b   ;=$DC0B/$DD0B
+.CIA_SHIFT              = $0c   ;=$DC0C/$DD0C
+.CIA_IRQ                = $0d   ;=$DC0D/$DD0D
+.CIA_TIMERA             = $0e   ;=$DC0E/$DD0E
+.CIA_TIMERB             = $0f   ;=$DC0F/$DD0F

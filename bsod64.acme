@@ -128,8 +128,8 @@
 .zp_addr                = $03
 .zp_addr_lo             = $03
 .zp_addr_hi             = $04
-;;; as above, but tracks the "real" address
-;;; rather than the virtual one
+;;; as above, but tracks the real address
+;;; rather than the "virtual" one
 ;;.zp_real                = $05
 ;;.zp_real_lo             = $05
 ;;.zp_real_hi             = $06
@@ -156,6 +156,16 @@
 .STR_POS                = $01   ; a string with screen co-ords follows
 .STR_KEY                = $02   ; a key-identifier string follows
 .STR_KEYPOS             = $03   ; as above, but also with screen co-ords
+
+; constants for memory-layout:
+;
+; (see <http://c64os.com/post/6510procport> for
+;  a full understanding of the processor port bits)
+;
+.MEM_ALL_RAM            = %00110100
+.MEM_IO_ONLY            = %00110101
+.MEM_KERNAL_IO          = %00110110
+.MEM_DEFAULT            = %00110111     ; KERNAL, I/O & BASIC
 
 
 ;===============================================================================
@@ -281,7 +291,7 @@ bsod_freeze:
         ; Datasette control lines are part of the processor port and you don't
         ; want to play around with the tape when changing memory layout
         ;
-        ; we actually want to stop the tape motor when freezing BSOD64
+        ; we actually want to stop the tape motor when freezing BSOD64,
         ; so we set the data-direction register to allow us to turn off bit 5
         ;
         lda .zp+0               ; current CPU data-direction register
@@ -290,10 +300,7 @@ bsod_freeze:
         sta .zp+0               ; to its default value
         lda .zp+1               ; current CPU port value
         sta orig_cpu_port       ; backup within BSOD64's code-area
-        ;     %--11----         = Datasette motor & buttons off
-        ;     %-----1--         = use I/O instead of char ROM
-        ;     $------00         = I/O, KERNAL and BASIC ROMs off
-        lda # %00110100
+        lda # .MEM_ALL_RAM      ; disable I/O & ROM
         sta .zp+1
         
         ; backup the low eight pages of memory:
@@ -362,7 +369,8 @@ bsod_freeze:
         ; turn I/O on & off for each read + write. whilst this is not ideal,
         ; it is the most-likely-to-be-unused memory available to us
         ;
-        ; TODO: use $0400 as swap space (avoid I/O on/off for every R/W)
+        ; TODO: use $0400 as swap space
+        ; (avoid I/O on/off for every R/W)
         ;
         ldx # 0
 -       inc .zp+1               ; enable the I/O shield for VIC-II registers
@@ -386,13 +394,19 @@ bsod_freeze:
 
         ; reset machine state:
         ;-----------------------------------------------------------------------
+        ; since the original stack is now backed-up, we can re-use the stack
+        ; however we please. because the user's program could have the stack
+        ; at any depth, even near to overflowing, we reset the stack pointer
+        ldx # $ff
+        txs
+
         ; TODO: do we need to reset the vectors ($0314-$0333)
         ;       before enabling the KERNAL?
-        lda # %00110111         ; enable BASIC,
+        lda # .MEM_KERNAL_IO    ; enable BASIC,
         sta .zp+1               ; KERNAL & I/O
 
         lda # %00000000         ; turn screen off
-        sta .vic+VIC_SCREEN_VERT
+        sta .vic+.VIC_SCREEN_VERT
 
         ; NOTE: we *must* create correct zero-page values for the KERNAL
         ;       to be enabled, in case the user's program fills zero-page
@@ -414,15 +428,15 @@ bsod_freeze:
 
         ; a BSOD must be blue...
         lda # .VIC_BLUE
-        sta .vic+VIC_SCREEN_BORDER
-        sta .vic+VIC_SCREEN_BKGRND
+        sta .vic+.VIC_SCREEN_BORDER
+        sta .vic+.VIC_SCREEN_BKGRND
 
         ; re-initialise CIAs, get interrupts running again.
         ; also silences the SID chip
         jsr .kernal_ioinit_addr
 
         lda # %00011011         ; 25 rows, screen on
-        sta .vic+VIC_SCREEN_VERT
+        sta .vic+.VIC_SCREEN_VERT
 
         ; configure working environment
         ;-----------------------------------------------------------------------
@@ -431,10 +445,10 @@ bsod_freeze:
         sei                     ; first, disable interrupts
 
         ; install the NMI handler
-        ;;lda #< bsod_nmi_kernalon
-        ;;sta .vectors+VECTOR_NMI+0
-        ;;lda #> bsod_nmi_kernalon
-        ;;sta .vectors+VECTOR_NMI+1
+        lda #< bsod_nmi_kernalon
+        sta .vectors+.VECTOR_NMI+0
+        lda #> bsod_nmi_kernalon
+        sta .vectors+.VECTOR_NMI+1
 
         lda #< bsod_nmi_nokernal
         sta .cpu_nmi_lo
@@ -442,12 +456,12 @@ bsod_freeze:
         sta .cpu_nmi_hi
 
         ; install the IRQ handler
-        ;;lda #< bsod_irq_kernalon
-        ;;sta .vectors+VECTOR_IRQ+0
-        ;;sta .vectors+VECTOR_BRK+0
-        ;;lda #> bsod_irq_kernalon
-        ;;sta .vectors+VECTOR_IRQ+1
-        ;;sta .vectors+VECTOR_BRK+1
+        lda #< bsod_irq_kernalon
+        sta .vectors+.VECTOR_IRQ+0
+        sta .vectors+.VECTOR_BRK+0
+        lda #> bsod_irq_kernalon
+        sta .vectors+.VECTOR_IRQ+1
+        sta .vectors+.VECTOR_BRK+1
 
         lda #< bsod_irq_nokernal
         sta .cpu_irq_lo
@@ -902,19 +916,36 @@ bsod_print_hexline:
         lda # .PET_LTBLUE
         jsr .kernal_chrout_scr
 
+        ;;sei                     ; disable interrupts
+
+        ; print hex-dump: (8 bytes)
+        ;-----------------------------------------------------------------------
         ldy # 8                 ; print 8-bytes
 -       lda # ' '               ; print space between bytes
         jsr .kernal_chrout_scr
+
+        ;;ldx # .MEM_ALL_RAM      ; turn off BASIC,
+        ;;stx .zp+1               ; KERNAL, and I/O
+
         lda .zp_addr_lo
         ldx .zp_addr_hi
         jsr bsod_get_frzn
+        
+        ;;ldx # .MEM_DEFAULT      ; turn on KERNAL,
+        ;;stx .zp+1               ; BASIC, and I/O
+
         jsr bsod_print_hex8
+        
         ; move to the next byte
         inc .zp_addr_lo
         bne +
         inc .zp_addr_hi
 +       dey
         bne -
+
+        ; clean-up and exit:
+        ;-----------------------------------------------------------------------
+        ;;cli                     ; enable interrupts
 
         ; restore the Y-register
 @y      ldy # .NULL_VALUE
@@ -929,13 +960,14 @@ bsod_get_frzn:
 ;===============================================================================
 ; read the value of an address from the frozen state:
 ; i.e. redirect addresses $0000-$07FF to $D000-$D7FF
-; (also this must always read RAM and not I/O or ROM)
+;
+; NOTE: I/O *MUST* be switched off to get the correct value
 ;
 ; in:   A       original address lo-byte
 ;       X       original address hi-byte
 ;
 ; out:  A       value of address from frozen state
-;
+;       Y       (preserved)
 ;-------------------------------------------------------------------------------
         ; if the address is within low-RAM then redirect
         ; the address to the frozen copy in high-RAM
@@ -945,15 +977,16 @@ bsod_get_frzn:
         sta @addr+1             ; set address lo-byte to read
 
         sei                     ; disable interrupts
-        ldx # %00110100         ; turn off BASIC,
+
+        ldx # .MEM_ALL_RAM      ; turn off BASIC,
         stx .zp+1               ; KERNAL, and I/O
 
 @addr   lda .null_addr          ; read the RAM address
 
-        ldx # %00110111         ; turn on KERNAL,
+        ldx # .MEM_DEFAULT      ; turn on KERNAL,
         stx .zp+1               ; BASIC, and I/O
-        cli                     ; enable interrupts
 
+        cli                     ; enable interrupts
         rts
 
 
@@ -961,16 +994,22 @@ bsod_get_frzn_addr:
 ;===============================================================================
 ; return the real address for a "virtual" address:
 ;
-; in:   A       original address lo-byte
-;       X       original address hi-byte
+; in:   A       virtual address lo-byte
+;       X       virtual address hi-byte
+;
+; out:  A       real address, lo-byte
+;       X       real address, hi-byte
+;       carry   0 = address was redirected
+;               1 = address was not redirected
+;       Y       (preserved)
 ;-------------------------------------------------------------------------------
         ; put aside the lo-byte as we check the hi-byte first
         pha
         
         ; the lower eight pages of the machine
-        ; were backed up and now stored elsewhere
+        ; were backed up and are now stored elsewhere
         txa
-        cmp #> .screen+$400
+        cmp #> .screen + $800
         bcs +                   ; if address > $07FF then return actual RAM
 
         ; if the address is within low-RAM then redirect
@@ -1311,9 +1350,9 @@ bsod_hook:
         sei                     ; disable interrupts whilst we alter them...
         
         lda #< bsod_hook_nmi
-        sta .vectors+VECTOR_NMI+lo
+        sta .vectors+.VECTOR_NMI+.lo
         lda #> bsod_hook_nmi
-        sta .vectors+VECTOR_NMI+hi
+        sta .vectors+.VECTOR_NMI+.hi
 
         cli                     ; re-enable interrupts
         rts
@@ -1369,6 +1408,9 @@ bsod_irq_kernalon:
 
 bsod_irq_nokernal:
         ;-----------------------------------------------------------------------
+        ; acknowledge the interrupt
+        asl .cia1+.CIA_IRQ
+        
         ; return from interrupt
         ; (restore processor flags, enable interrupts)
         rti
@@ -1378,7 +1420,8 @@ bsod_irq_nokernal:
 ;
 bsod_nmi_nokernal:
         ;-----------------------------------------------------------------------
-        lda .cia2+CIA_IRQ
+        ; acknowledge the interrupt
+        asl .cia2+.CIA_IRQ
 
 bsod_nmi_kernalon:
         ;-----------------------------------------------------------------------
@@ -1428,7 +1471,7 @@ bsod_BSOD:
         ; they could be underneath the BASIC or KERNAL ROM!
         ;
         sei                     ; disable interrupts
-        lda # %00110100         ; turn off BASIC,
+        lda # .MEM_ALL_RAM      ; turn off BASIC,
         sta .zp+1               ; KERNAL & I/O
 
         ; copy the frozen program counter
@@ -1455,12 +1498,12 @@ bsod_BSOD:
 -       lda (.zp_str), y        ; read a character from the string
         beq +                   ; if $00, stop printing
 
-        ldx # %00110111         ; turn on I/O,
+        ldx # .MEM_KERNAL_IO    ; turn on I/O,
         stx .zp+1               ; KERNAL & BASIC
 
         jsr .kernal_chrout_scr  ; print the character
         
-        ldx # %00110100         ; turn off BASIC,
+        ldx # .MEM_ALL_RAM      ; turn off BASIC,
         stx .zp+1               ; KERNAL & I/O
         
         iny                     ; move to next character
@@ -1468,7 +1511,7 @@ bsod_BSOD:
 
 +       ; print CPU status:
         ;-----------------------------------------------------------------------
-@nomsg: lda # %00110111         ; turn on I/O,
+@nomsg: lda # .MEM_KERNAL_IO    ; turn on I/O,
         sta .zp+1               ; BASIC & KERNAL
         cli                     ; enable interrupts
 
