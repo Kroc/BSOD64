@@ -55,7 +55,8 @@
 ;
 ; *     a normal JSR or interrupt subtracts one from the program counter before
 ;       pushing it to the stack, this is because the RTS & RTI instructions
-;       always automatically add 1 to the program counter (an internal detail). ;       the BRK instruction, however *adds* 1 to the program counter before 
+;       always automatically add 1 to the program counter (an internal detail).
+;       the BRK instruction, however *adds* 1 to the program counter before 
 ;       pushing it to the stack! returning from a BRK interrupt therefore skips
 ;       over a byte unless this is accounted for!
 ;
@@ -128,11 +129,11 @@
 .zp_addr                = $03
 .zp_addr_lo             = $03
 .zp_addr_hi             = $04
-;;; as above, but tracks the real address
-;;; rather than the "virtual" one
-;;.zp_real                = $05
-;;.zp_real_lo             = $05
-;;.zp_real_hi             = $06
+; as above, but tracks the real address
+; rather than the "virtual" one
+.zp_real                = $05
+.zp_real_lo             = $05
+.zp_real_hi             = $06
 
 ;-------------------------------------------------------------------------------
 ; address for string indexing
@@ -870,6 +871,13 @@ bsod_redraw_memory:
         ; print the hex-dump:
         ldy # 16                ; number of lines to print
 -       jsr bsod_print_hexline  ; print 8-bytes...
+
+        lda # 8                 ; add 8 to the virtual address
+        adc .zp_addr_lo
+        bcc +
+        inc .zp_addr_hi
++       sta .zp_addr_lo
+       
         dey
         bne -
 
@@ -902,7 +910,10 @@ bsod_print_hexline:
 
         ; print the hexline:
         ;-----------------------------------------------------------------------
-        ; print the gutter
+        ; print the gutter. an "@" will be placed there (by the above code)
+        ; for the line that contains the working program counter. (note that
+        ; the user can modify the program counter restored upon defrosting)
+        ;
 +       jsr bsod_print_str_inline
 @here       !pet    .PET_PURPLE, "  "
             !pet    .PET_GREEN, "$"
@@ -916,7 +927,32 @@ bsod_print_hexline:
         lda # .PET_LTBLUE
         jsr .kernal_chrout_scr
 
-        ;;sei                     ; disable interrupts
+        ; read 8-bytes from the frozen state:
+        ;-----------------------------------------------------------------------
+        ; retrieve the real address from the virtual address
+        ;
+        lda .zp_addr_lo
+        ldx .zp_addr_hi
+        jsr bsod_get_frzn_addr
+        sta .zp_real_lo
+        stx .zp_real_hi
+
+        sei                     ; disable interrupts
+        lda # .MEM_ALL_RAM      ; turn off BASIC,
+        sta .zp+1               ; KERNAL, and I/O
+
+        ; read and push bytes to the stack
+        ldy # 0
+        ldx # 8
+-       lda (.zp_real), y
+        pha
+        iny
+        dex
+        bne -
+
+        lda # .MEM_DEFAULT      ; turn on KERNAL,
+        sta .zp+1               ; BASIC, and I/O
+        cli                     ; enable interrupts
 
         ; print hex-dump: (8 bytes)
         ;-----------------------------------------------------------------------
@@ -924,36 +960,16 @@ bsod_print_hexline:
 -       lda # ' '               ; print space between bytes
         jsr .kernal_chrout_scr
 
-        ;;ldx # .MEM_ALL_RAM      ; turn off BASIC,
-        ;;stx .zp+1               ; KERNAL, and I/O
-
-        lda .zp_addr_lo
-        ldx .zp_addr_hi
-        jsr bsod_get_frzn
-        
-        ;;ldx # .MEM_DEFAULT      ; turn on KERNAL,
-        ;;stx .zp+1               ; BASIC, and I/O
-
-        jsr bsod_print_hex8
-        
-        ; move to the next byte
-        inc .zp_addr_lo
-        bne +
-        inc .zp_addr_hi
-+       dey
-        bne -
+        pla                     ; pull one byte from the stack
+        jsr bsod_print_hex8     ; print as two-digit hexadecimal
++       dey                     ; one less byte...
+        bne -                   ; keep going?
 
         ; clean-up and exit:
         ;-----------------------------------------------------------------------
-        ;;cli                     ; enable interrupts
-
-        ; restore the Y-register
-@y      ldy # .NULL_VALUE
-
-        ; move to the next line
-        ; (Y is preserved)
-        lda # .PET_RETURN
-        jmp .kernal_chrout_scr
+@y      ldy # .NULL_VALUE       ; restore the Y-register
+        lda # .PET_RETURN       ; move to the next line
+        jmp .kernal_chrout_scr  ; (Y is preserved)
 
 
 bsod_get_frzn:
@@ -1058,9 +1074,6 @@ bsod_print_hex8:
 ; out:  X, Y    (preserved)
 ;
 ;-------------------------------------------------------------------------------
-        stx @x+1                ; preserve X-register
-        sty @y+1                ; preserve Y-register
-
         sed                     ; enable decimal mode
         pha                     ; put original value aside
 
@@ -1070,7 +1083,7 @@ bsod_print_hex8:
         lsr                     ; ...
         cmp # 9+1
         adc # $30               ; rebase to PETSCII '0' and above
-        jsr .kernal_chrout_scr
+        jsr .kernal_chrout_scr  ; NOTE: no effect from decimal mode?
 
         pla                     ; retrieve original value
         and # $0f               ; extract lower nybble
@@ -1078,8 +1091,6 @@ bsod_print_hex8:
         adc # $30               ; rebase to PETSCII '0' and above
         
         cld                     ; disable decimal mode
-@x      ldx # .NULL_VALUE       ; restore X register
-@y      ldy # .NULL_VALUE       ; restore Y register
         
         ; print the last digit
         ; (X & Y are preserved)
