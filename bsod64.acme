@@ -471,7 +471,7 @@ bsod_freeze:
         
         ; enable interrupts and hope
         ; the machine doesn't crash
-        cli                     ; enable interrupts
+        cli
 
         ;-----------------------------------------------------------------------
         ; make a note if BSOD64 was
@@ -894,19 +894,31 @@ bsod_print_hexline:
         ; check if this line contains the (working) program counter:
         ;-----------------------------------------------------------------------
         lda # " "
-        sta @here+2
+        sta @pcrow+2
 
         lda .bsod_pc_hi         ; compare the hi-bytes first
         cmp .zp_addr_hi
         bne +
         
         lda .bsod_pc_lo         ; get working program counter, lo-byte
-        and # %11111000         ; modulo 8, since each hexline is 8-bytes
+        and # %11111000         ; modulo 8, since each hexrow is 8-bytes
         cmp .zp_addr_lo         ; compare with this row
         bne +
 
+        ; program counter is on this row:
+        ;
         lda # "@"
-        sta @here+2
+        sta @pcrow+2
+
+        ; subtract the lo-bytes to work out which of the 8-bytes
+        ; in a row the program counter will be on
+        lda .bsod_pc_lo
+        sec
+        sbc .zp_addr_lo
+        +bit_skip2
+
++       lda # $ff
+        sta @pccol+1
 
         ; print the hexline:
         ;-----------------------------------------------------------------------
@@ -914,8 +926,8 @@ bsod_print_hexline:
         ; for the line that contains the working program counter. (note that
         ; the user can modify the program counter restored upon defrosting)
         ;
-+       jsr bsod_print_str_inline
-@here       !pet    .PET_PURPLE, "  "
+        jsr bsod_print_str_inline
+@pcrow      !pet    .PET_PURPLE, "  "
             !pet    .PET_GREEN, "$"
             !byte   .STR_END
 
@@ -942,13 +954,11 @@ bsod_print_hexline:
         sta .zp+1               ; KERNAL, and I/O
 
         ; read and push bytes to the stack
-        ldy # 0
-        ldx # 8
+        ldy # 7
 -       lda (.zp_real), y
         pha
-        iny
-        dex
-        bne -
+        dey
+        bpl -
 
         lda # .MEM_DEFAULT      ; turn on KERNAL,
         sta .zp+1               ; BASIC, and I/O
@@ -957,12 +967,18 @@ bsod_print_hexline:
         ; print hex-dump: (8 bytes)
         ;-----------------------------------------------------------------------
         ldy # 8                 ; print 8-bytes
--       lda # ' '               ; print space between bytes
+        ldx # 0
+-       ; is this byte the program-counter?
+        ; the comparison value needed is written in here earlier
+@pccol  cpx # .NULL_VALUE
+        beq @here
+        lda # " "               ; print space between bytes
         jsr .kernal_chrout_scr
 
         pla                     ; pull one byte from the stack
         jsr bsod_print_hex8     ; print as two-digit hexadecimal
-+       dey                     ; one less byte...
+        inx
+        dey                     ; one less byte...
         bne -                   ; keep going?
 
         ; clean-up and exit:
@@ -970,6 +986,19 @@ bsod_print_hexline:
 @y      ldy # .NULL_VALUE       ; restore the Y-register
         lda # .PET_RETURN       ; move to the next line
         jmp .kernal_chrout_scr  ; (Y is preserved)
+
+        ;-----------------------------------------------------------------------
+        ; print the "@" for the program-counter
+@here:  jsr bsod_print_str_inline
+                !pet    .PET_PURPLE, "@"
+                !pet    .PET_LTBLUE
+                !byte   .STR_END
+
+        pla                     ; pull one byte from the stack
+        jsr bsod_print_hex8     ; print as two-digit hexadecimal
+        inx
+        dey                     ; one less byte...
+        bne -                   ; keep going?
 
 
 bsod_get_frzn:
@@ -1086,7 +1115,7 @@ bsod_print_hex8:
         jsr .kernal_chrout_scr  ; NOTE: no effect from decimal mode?
 
         pla                     ; retrieve original value
-        and # $0f               ; extract lower nybble
+        and # %00001111         ; extract lower nybble
         cmp # 9+1
         adc # $30               ; rebase to PETSCII '0' and above
         
@@ -1135,7 +1164,7 @@ bsod_print_bin8:
 
         bcc +                   ; is bit 0 or 1?
         lda # $2a               ; PETSCII '*'
-        !byte $2c               ; `bit $....` (skip next 2-byte instruction)
+        +bit_skip2              ; `bit $....` (skip next 2-byte instruction)
 +       lda # $2d               ; PETSCII '-'
         jsr .kernal_chrout_scr
         
