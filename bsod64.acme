@@ -69,8 +69,8 @@
 ;===============================================================================
 ; when BSOD64 is invoked, the areas of memory that BSOD64 needs to re-use are
 ; copied to the RAM under the I/O space. since this RAM is very difficult to
-; use, it's the most likely "unused" RAM on the system and the last area a
-; developer will want to utilise before any other
+; use, it's the most likely "unused" RAM on the system and the last area
+; a developer will want to utilise before any other
 ;
 !addr {
 .frzn                   = $d000 ; (base address of frozen data)
@@ -82,21 +82,21 @@
 .frzn_color             = $d800 ; backup of colour RAM ($D800-$DBFF)
 .frzn_vic               = $dc00 ; backup of VIC-II registers (46-bytes)
 
+.frzn_a                 = $dcff ; backup of the A register
+.frzn_x                 = $dcfe ; backup of the X register
+.frzn_y                 = $dcfd ; backup of the Y register
+.frzn_sp                = $dcfb ; backup of the stack pointer
+.frzn_pc                = $dcf9 ; backup of the program counter
+.frzn_pc_lo             = $dcf9
+.frzn_pc_hi             = $dcfa
+.frzn_f                 = $dcf8 ; backup of the processor flags
+
 ;-------------------------------------------------------------------------------
 ; depending on how BSDO64 is invoked, different actions
 ; must be taken during the freeze and defrost
 ;
 .bsod_is_jsr            = $cfff ; BSOD64 invoked by JSR? $00 = no, $FF = yes
 .bsod_is_brk            = $cffe ; BRK interrupt flag: $00 = no, $FF = yes
-
-.bsod_a                 = $cffd ; working copy of the A register
-.bsod_x                 = $cffc ; working copy of the X register
-.bsod_y                 = $cffb ; working copy of the Y register
-.bsod_sp                = $cffa ; working copy of the stack pointer
-.bsod_pc                = $cff8 ; working copy of the program counter
-.bsod_pc_lo             = $cff8
-.bsod_pc_hi             = $cff9
-.bsod_f                 = $cff7 ; working copy of the processor flags
 
 ; address that appears at the top of the memory viewer window
 ; i.e. the current memory range (128-bytes) within the window;
@@ -250,18 +250,18 @@ bsod_freeze:
         cld
         tsx                     ; get the stack pointer
         stx orig_sp             ; keep an unmodified copy
-        stx .bsod_sp            ; make a working copy
+        stx .frzn_sp            ; make a working copy
         ; backup the registers that were pushed on to the stack by the
         ; IRQ/NMI routine (or BSOD64 iteself in the case of `bsod_jsr`)
         lda .stack+3, x         ; 1st register on stack
         sta orig_y              ; keep an unmodified copy of Y
-        sta .bsod_y             ; make a working (modifiable) copy
+        sta .frzn_y             ; make a working (modifiable) copy
         lda .stack+4, x         ; 2nd register on stack
         sta orig_x              ; keep an unmodified copy of X
-        sta .bsod_x             ; make a working (modifiable) copy
+        sta .frzn_x             ; make a working (modifiable) copy
         lda .stack+5, x         ; 3rd register on stack
         sta orig_a              ; keep an unmodified copy of A
-        sta .bsod_a             ; make a working (modifiable) copy
+        sta .frzn_a             ; make a working (modifiable) copy
 
         ; below the registers should be the processor status
         ; at the time of interrupt. we will need this to determine
@@ -269,7 +269,7 @@ bsod_freeze:
         ;
         lda .stack+6, x
         sta orig_f              ; keep an unmodified copy
-        sta .bsod_f             ; make a working (modifiable) copy
+        sta .frzn_f             ; make a working (modifiable) copy
 
         ; and lastly the program-counter. for now we do not make a working
         ; copy because the address of the program counter varies depending
@@ -307,7 +307,9 @@ bsod_freeze:
         ; backup the low eight pages of memory:
         ;
         ldx # 0
-        ; backup the zero-page:
+        ; backup the zero-page: note that addresses 0/1 have been modified
+        ; from the originals above, so we will want to place the original
+        ; values into the frozen state after the backup
 -       lda .zp, x
         sta .frzn_zp, x
         ; backup the original stack: since BSOD64 will be using the stack
@@ -332,6 +334,11 @@ bsod_freeze:
         ; rinse and repeat
         dex
         bne -
+
+        lda orig_cpu_ddir       ; take the original data-direction value
+        sta .frzn_zp+0          ; and put into the frozen state
+        lda orig_cpu_port       ; and do the same with the CPU port value
+        sta .frzn_zp+1
 
         ; with KERNAL off, we can back up the hardware vectors underneath:
         ; the non-maskable interrupt, wired to the RESTORE key & CIA2
@@ -477,7 +484,7 @@ bsod_freeze:
         ; make a note if BSOD64 was
         ; invoked by a BRK instruction
         ;
-        lda .bsod_f             ; processor state before interrupt
+        lda .frzn_f             ; processor state before interrupt
         and # %00010000         ; isolate the BRK bit
         beq +                   ; use $00 for non-BRK
         lda # $ff               ; use $FF for BRK
@@ -490,10 +497,10 @@ bsod_freeze:
         clc
         lda orig_pc_lo
         adc # 1
-        sta .bsod_pc_lo
+        sta .frzn_pc_lo
         lda orig_pc_hi
         adc # 0
-        sta .bsod_pc_hi
+        sta .frzn_pc_hi
 
         ; WARNING: the program counter on the stack will be 'off' by a
         ;          differing amount depending on how BSOD64 was invoked!
@@ -520,11 +527,11 @@ bsod_freeze:
         ; BRK call: fix the program
         ; counter by subtracting 2
         sec
-        lda .bsod_pc_lo
+        lda .frzn_pc_lo
         sbc # 2
-        sta .bsod_pc_lo
+        sta .frzn_pc_lo
         bcs +
-        dec .bsod_pc_hi
+        dec .frzn_pc_hi
 
         ; go display the crash-screen
 +       jsr bsod_BSOD
@@ -533,9 +540,9 @@ bsod_freeze:
         ;-----------------------------------------------------------------------
         ; set the memory cursor on the frozen program counter, i.e.
         ; the memory viewer window will be focused on the freeze-point
-@debug: lda .bsod_pc_lo
+@debug: lda .frzn_pc_lo
         sta .bsod_memaddr_lo
-        lda .bsod_pc_hi
+        lda .frzn_pc_hi
         sta .bsod_memaddr_hi
 
         ; the memory viewer window is always aligned to the nearest 8-bytes;
@@ -644,7 +651,7 @@ bsod_redraw:
         jsr bsod_redraw_memory
 
 bsod_input:
-        ;-----------------------------------------------------------------------
+;===============================================================================
         ; scan the keyboard, placing any active key into the buffer
         jsr .kernal_scnkey_addr
         ; read a key from the keyboard buffer
@@ -694,24 +701,24 @@ bsod_redraw_registers:
 ;-------------------------------------------------------------------------------
         ldx # 3                 ; screen row
         ldy # 23                ; screen column
-        lda .bsod_a             ; "current" A-register value
+        lda .frzn_a             ; "current" A-register value
         jsr bsod_print_hex8_pos
         lda # ' '
         tay
         jsr .kernal_chrout_scr
-        lda .bsod_x             ; "current" X-register value
+        lda .frzn_x             ; "current" X-register value
         jsr bsod_print_hex8
         tya
         jsr .kernal_chrout_scr
-        lda .bsod_y             ; "current" Y-register value
+        lda .frzn_y             ; "current" Y-register value
         jsr bsod_print_hex8
 
         ; program counter value:
         ldy # 18                ; column; row should already be 3
         jsr bsod_set_cursor
 
-        lda .bsod_pc_hi         ; "current" program counter value
-        ldx .bsod_pc_lo
+        lda .frzn_pc_hi         ; "current" program counter value
+        ldx .frzn_pc_lo
         jsr bsod_print_hex16
 
         rts
@@ -728,7 +735,7 @@ bsod_redraw_flags:
         ldx # 3
         jsr bsod_set_cursor
 
-        lda .bsod_f
+        lda .frzn_f
         sec
         jsr bsod_print_bin8
 
@@ -806,14 +813,14 @@ bsod_redraw_stack:
         lda # 7
         sta @line
         ; get the frozen stack pointer
-        ldy .bsod_sp
+        ldy .frzn_sp
 
 -       jsr bsod_print_str_inline_pos
 @line       !byte   7, 32
             !pet    .PET_PURPLE, .STR_END
         
         ; is this line the top of the stack at freeze-time?
-        cpy .bsod_sp
+        cpy .frzn_sp
         bne +
         lda # "@"
        +bit_skip2
@@ -877,7 +884,7 @@ bsod_redraw_memory:
         bcc +
         inc .zp_addr_hi
 +       sta .zp_addr_lo
-       
+
         dey
         bne -
 
@@ -896,11 +903,11 @@ bsod_print_hexline:
         lda # " "
         sta @pcrow+2
 
-        lda .bsod_pc_hi         ; compare the hi-bytes first
+        lda .frzn_pc_hi         ; compare the hi-bytes first
         cmp .zp_addr_hi
         bne +
         
-        lda .bsod_pc_lo         ; get working program counter, lo-byte
+        lda .frzn_pc_lo         ; get working program counter, lo-byte
         and # %11111000         ; modulo 8, since each hexrow is 8-bytes
         cmp .zp_addr_lo         ; compare with this row
         bne +
@@ -912,7 +919,7 @@ bsod_print_hexline:
 
         ; subtract the lo-bytes to work out which of the 8-bytes
         ; in a row the program counter will be on
-        lda .bsod_pc_lo
+        lda .frzn_pc_lo
         sec
         sbc .zp_addr_lo
         +bit_skip2
@@ -1490,8 +1497,8 @@ bsod_BSOD:
             !pet    "break at $"
             !pet    .STR_END
         
-        lda .bsod_pc_hi
-        ldx .bsod_pc_lo
+        lda .frzn_pc_hi
+        ldx .frzn_pc_lo
         jsr bsod_print_hex16
 
         jsr bsod_print_str_inline
@@ -1516,9 +1523,9 @@ bsod_BSOD:
 
         ; copy the frozen program counter
         ; into the zero-page for indexing
-        lda .bsod_pc_lo
+        lda .frzn_pc_lo
         sta .zp_str_lo
-        lda .bsod_pc_hi
+        lda .frzn_pc_hi
         sta .zp_str_hi
 
         ; read the first byte following the BRK
