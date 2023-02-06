@@ -7,12 +7,12 @@
                        --- addressing modes ---
 
 
-If a command can be used with different addressing modes, ACME has to
-decide which one to use. Several commands of the 6502 CPU can be used
-with either "absolute" addressing or "zeropage-absolute" addressing.
-The former one means there's a 16-bit argument, the latter one means
-there's an 8-bit argument.
-And the 65816 CPU even knows some commands with 24-bit addressing...
+If an instruction can be used with different addressing modes, ACME
+has to decide which one to use. Several instructions of the 6502 CPU
+can be used with either "absolute" addressing or "zeropage-absolute"
+addressing. The former one means there's a 16-bit argument, the latter
+one means there's an 8-bit argument.
+And the 65816 CPU even has some instructions with 24-bit addressing...
 
 So how does ACME know which addressing mode to use?
 The simple approach is to always use the smallest possible argument,
@@ -29,11 +29,10 @@ The two exceptions are:
 
 
 
-
 ***   1) Symbols are defined too late
 
 If ACME cannot figure out the argument value in the first pass, it
-assumes that the command uses 16-bit addressing.
+assumes that the instruction uses 16-bit addressing.
 
 If it later finds out that the argument only needs 8 bits, ACME gives
 a warning ("using oversized addressing mode") and continues. However,
@@ -43,8 +42,7 @@ These problems can be solved by defining the symbols *before* using
 them, so that the value can be figured out in the first pass. If this
 is not possible, you can use the postfix method, effectively exactly
 defining what addressing mode to use. The postfix method is described
-in a separate paragraph below.
-
+in a separate section below.
 
 
 
@@ -85,9 +83,11 @@ will be assembled to
   ad fd 00	; lda $00fd
   8f ff 00 00	; sta $0000ff
 
-The other possibility is to use the postfix method (described in the
-next paragraph).
+This feature can be disabled using the "--ignore-zeroes" CLI switch.
 
+
+The other possibility is to use the postfix method (described in the
+next section).
 
 
 
@@ -129,7 +129,7 @@ will be assembled to
   8c fd 00	; sty $00fd
   8f ff 00 00	; sta $0000ff
 
-Postfixes given directly after the command have higher priority than
+Postfixes added directly to the mnemonic have higher priority than
 those given to the argument. As you can see, you can add the postfix
 to the symbol definition as well (equivalent to leading zeros).
 
@@ -138,8 +138,7 @@ gives the high byte and "^" gives the bank byte of a value) to any
 value will clear the argument's Force Bits 2 and 3 and set Force
 Bit 1 instead. So "lda <symbol" will use 8-bit addressing, regardless
 of the symbol's Force Bits. Of course, you can change this by
-postfixing the command again... :)
-
+postfixing the instruction again... :)
 
 
 
@@ -149,7 +148,7 @@ You don't need to read this paragraph just to use ACME, I only
 included it for completeness' sake. This is a description of ACME's
 strategy for finding the addressing mode to use:
 
-First, ACME checks whether the command has any postfix. If it has,
+First, ACME checks whether the instruction has any postfix. If it has,
 ACME acts upon it. So postfixes have the highest priority.
 
 Otherwise, ACME checks whether the argument has any Force Bits set

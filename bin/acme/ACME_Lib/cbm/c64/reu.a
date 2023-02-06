@@ -47,8 +47,8 @@ rec_COMMAND_FETCH	= %#.#....#	;	starting and then reload values.
 	; Upgraded units and clones may have more, but the REC chip will always
 	; "wrap around" after eight banks if crossing bank borders!
 	; amount of bytes to process
-	rec_amount_low	= $df07
-	rec_amount_high	= $df08
+	rec_amount_low	= $df07	; using $0000 results in
+	rec_amount_high	= $df08	;	64 KiB being transferred
 	; when to request interrupts
 	rec_irqctrl	= $df09
 }

@@ -1,4 +1,4 @@
-;ACME 0.96.3
+;ACME 0.96.4
 
 !ifdef lib_65816_std_a !eof
 lib_65816_std_a = 2
@@ -72,11 +72,11 @@ lib_65816_std_a = 2
 	+i8
 }
 
-!macro inc24 .t {; increase 24-bit counter
-	inc .t
+!macro inc24 @t {; increase 24-bit counter
+	inc @t
 	bne +
-	inc .t + 1
+	inc @t + 1
 	bne +
-	inc .t + 2
+	inc @t + 2
 +
 }

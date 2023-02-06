@@ -22,17 +22,18 @@ Purpose:	Insert 8-bit values.
 Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	"!08", "!by", "!byte"
 Examples:	!08 127, symbol, -128	; output some values
-		!by 14, $3d, %0110, &304, <*, "c"
+		!by 14, $3d, %0110, &304, <*, 'c'
 		!byte 3 - 4, symbol1 XOR symbol2, 2 ^ tz, (3+4)*7
 
 
 Call:		!16 EXPRESSION [, EXPRESSION]*
 Purpose:	Insert 16-bit values in chosen CPU's byte order.
 Parameters:	EXPRESSION: Any formula the value parser accepts.
-Aliases:	"!wo", "!word" (and because all currently supported CPUs are
-		little-endian, "!le16" is in fact another alias)
+Aliases:	"!wo", "!word" (and because all currently supported
+		CPUs are little-endian, "!le16" is in fact another
+		alias)
 Examples:	!16 65535, symbol, -32768	; output some values
-		!wo 14, $4f35, %100101010010110, &36304, *, "c"
+		!wo 14, $4f35, %100101010010110, &36304, *, 'c'
 		!word 3000 - 4, a1 AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 Call:		!le16 EXPRESSION [, EXPRESSION]*
@@ -41,7 +42,7 @@ Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None (but because all currently supported CPUs are
 		little-endian, "!16/!wo/!word" are in fact aliases)
 Examples:	!le16 65535, symbol, -32768	; output some values
-		!le16 14, $4f35, %100101010010110, &36304, *, "c"
+		!le16 14, $4f35, %100101010010110, &36304, *, 'c'
 		!le16 3000 - 4, a1 AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 Call:		!be16 EXPRESSION [, EXPRESSION]*
@@ -49,7 +50,7 @@ Purpose:	Insert 16-bit values in big-endian byte order.
 Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None
 Examples:	!be16 65535, symbol, -32768	; output some values
-		!be16 14, $4f35, %100101010010110, &36304, *, "c"
+		!be16 14, $4f35, %100101010010110, &36304, *, 'c'
 		!be16 3000 - 4, a1 AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 
@@ -59,7 +60,7 @@ Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None (but because all currently supported CPUs are
 		little-endian, "!le24" is in fact an alias)
 Examples:	!24 16777215, symbol, -8388608, 14, $6a4f35
-		!24 %10010110100101010010110, &47336304, *, "c"
+		!24 %10010110100101010010110, &47336304, *, 'c'
 		!24 300000 - 4, a1 AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 Call:		!le24 EXPRESSION [, EXPRESSION]*
@@ -68,7 +69,7 @@ Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None (but because all currently supported CPUs are
 		little-endian, "!24" is in fact an alias)
 Examples:	!le24 16777215, symbol, -8388608, 14, $6a4f35
-		!le24 %10010110100101010010110, &47336304, *, "c"
+		!le24 %10010110100101010010110, &47336304, *, 'c'
 		!le24 300000 - 4, a1 AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 Call:		!be24 EXPRESSION [, EXPRESSION]*
@@ -76,7 +77,7 @@ Purpose:	Insert 24-bit values in big-endian byte order.
 Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None
 Examples:	!be24 16777215, symbol, -8388608, 14, $6a4f35
-		!be24 %10010110100101010010110, &47336304, *, "c"
+		!be24 %10010110100101010010110, &47336304, *, 'c'
 		!be24 300000 - 4, a1 AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 
@@ -86,7 +87,7 @@ Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None (but because all currently supported CPUs are
 		little-endian, "!le32" is in fact an alias)
 Examples:	!32 $7fffffff, symbol, -$80000000, 14, $46a4f35
-		!32 %1001011010010101001011010010, &4733630435, *, "c"
+		!32 %1001011010010101001011010010, &4733630435, *, 'c'
 		!32 300000 - 4, a AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 Call:		!le32 EXPRESSION [, EXPRESSION]*
@@ -95,7 +96,7 @@ Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None (but because all currently supported CPUs are
 		little-endian, "!32" is in fact an alias)
 Examples:	!le32 $7fffffff, symbol, -$80000000, 14, $46a4f35
-		!le32 %1001011010010101001011010010, &4733630435, *, "c"
+		!le32 %1001011010010101001011010010, &4733630435, *, 'c'
 		!le32 300000 - 4, a AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 Call:		!be32 EXPRESSION [, EXPRESSION]*
@@ -103,17 +104,17 @@ Purpose:	Insert 32-bit values in big-endian byte order.
 Parameters:	EXPRESSION: Any formula the value parser accepts.
 Aliases:	None
 Examples:	!be32 $7fffffff, symbol, -$80000000, 14, $46a4f35
-		!be32 %1001011010010101001011010010, &4733630435, *, "c"
+		!be32 %1001011010010101001011010010, &4733630435, *, 'c'
 		!be32 300000 - 4, a AND a2, 2 ^ tz, (3+4)*70, l1 & .j2
 
 
 Call:		!hex PAIRS_OF_HEX_DIGITS
-Purpose:	Insert byte values with a minimum of additional syntax.
-		This pseudo opcode was added for easier writing of external
-		source code generator tools.
-Parameters:	PAIRS_OF_HEX_DIGITS: Just hexadecimal digits, without any
-		"0x" or "$" prefix. Spaces and TABs are allowed, but not
-		needed to separate the byte values.
+Purpose:	Insert byte values with a minimum of additional
+		syntax. This pseudo opcode was added for easier
+		writing of external source code generator tools.
+Parameters:	PAIRS_OF_HEX_DIGITS: Just hexadecimal digits, without
+		any "0x" or "$" prefix. Spaces and TABs are allowed,
+		but not needed to separate the byte values.
 Aliases:	"!h"
 Examples:	!h f0 f1 f2 f3 f4 f5 f6 f7	; insert values 0xf0..0xf7
 		!h f0f1f2f3 f4f5f6f7		; insert values 0xf0..0xf7
@@ -136,10 +137,12 @@ Examples:	!fi 256, $ff	; reserve 256 bytes
 
 
 Call:		!skip AMOUNT
-Purpose:	Advance in output buffer without starting a new segment.
+Purpose:	Advance in output buffer without starting a new
+		segment.
 Parameters:	AMOUNT: Any formula the value parser accepts, but it
-		must be solvable even in the first pass (this limitation
-		will hopefully be lifted in a future release).
+		must be solvable even in the first pass (this
+		limitation will hopefully be lifted in a future
+		release).
 Aliases:	None
 Examples:	!skip BUFSIZE	; reserve some bytes
 		!skip 5		; reserve five bytes
@@ -155,7 +158,7 @@ Parameters:	ANDVALUE: Any formula the value parser accepts, but it
 		it must be solvable even in the first pass.
 		FILLVALUE: Any formula the value parser accepts. If it
 		is omitted, a default value is used (currently 234,
-		that's the 6502 CPU's NOP command).
+		that's the opcode of the 6502 CPU's NOP instruction).
 Examples:	!align 255, 0	; align to page (256 bytes)
 		!align 63, 0	; align to C64 sprite block (64 bytes)
 
@@ -378,23 +381,25 @@ Section:   Flow control
 
 Call:		!if CONDITION { BLOCK } [ else { BLOCK } ]
 Purpose:	Conditional assembly. If the given condition is true,
-		the first block of statements will be parsed;
-		if it isn't, the second block will be parsed instead
-		(if present).
+		the matching block of statements will be parsed;
+		if no condition is true, the ELSE block (if present)
+		will be parsed.
 Parameters:	CONDITION: Any formula the value parser accepts, but
 		it must be solvable even in the first pass.
 		BLOCK: A block of assembler statements.
-Examples:	!text "Black", 0	; Choose wording according to
-		!if country = uk {	; content of "country" symbol.
+Examples:	; Choose word according to "country" symbol:
+		!if country = uk {
 			!text "Grey"
+		} else if country = fr {
+			!text "Gris"
+		} else if country = de {
+			!text "Grau"
 		} else {
 			!text "Gray"
 		}
-		!byte 0
-		!text "White", 0
 
-		; Insert debug commands if symbol "debug" is not zero:
-		!if debug { lda #"z":jsr char_output }
+		; Insert debug code depending on symbol "debug":
+		!if debug { lda #'z':jsr char_output }
 
 
 Call:		!ifdef SYMBOL { BLOCK } [ else { BLOCK } ]
@@ -437,12 +442,26 @@ Examples:	; this was taken from <6502/std.a>:
 			; further instances will be skipped.
 		}
 
+		; include at most one driver source code:
+		!ifdef RAM_REU {
+			!src "driver_reu.a"
+		} else ifdef RAM_GEORAM {
+			!src "driver_georam.a"
+		} else ifdef RAM_VDCRAM {
+			!src "driver_vdcram.a"
+		} else ifdef RAM_SUPERRAM {
+			!src "driver_superram.a"
+		} else {
+			!src "driver_noram.a"
+		}
+
 
 Call:		!for SYMBOL, START, END { BLOCK }
 Purpose:	Looping assembly. The block of statements will be
 		parsed a fixed number of times, as specified by the
-		values of START and END. For a more flexible
-		possibility, have a look at "!do" below.
+		values of START and END. For more flexible
+		possibilities, have a look at "!do" and "!while"
+		below.
 Parameters:	SYMBOL: Any valid symbol name.
 		START: Any formula the value parser accepts, but it
 		must be solvable even in the first pass. SYMBOL will 
@@ -492,12 +511,13 @@ Examples:
 Miscellaneous:	The old syntax ("!for SYMBOL, END { BLOCK }" where
 		START was always implied to be 1) is still fully
 		supported, but gives a warning to get people to change
-		to the new syntax. You can disable this warning using
-		the "-Wno-old-for" switch, but then you will get
+		to the new syntax.
+		You can disable this warning using the "--dialect" or
+		the "-Wno-old-for" switches, but then you will get
 		warnings for using the *new* syntax.
-		When migrating your sources, bear in mind that it is
-		no longer possible to skip the block completely by
-		specifying a loop count of zero.
+		When migrating your sources to the current syntax,
+		bear in mind that it is no longer possible to skip the
+		block completely by specifying a loop count of zero.
 		Also note that with the new algorithm, SYMBOL has a
 		different value after the block than during the last
 		loop cycle, while the old algorithm kept that last
@@ -507,9 +527,9 @@ Miscellaneous:	The old syntax ("!for SYMBOL, END { BLOCK }" where
 Call:		!set SYMBOL = VALUE
 Purpose:	Assign given value to symbol even if the symbol
 		already has a different value. Needed for loop
-		counters when using "!do", for example. Only use this
-		opcode for something else if you're sure you *really*
-		know what you are doing... :)
+		counters when using "!do"or "!while", for example.
+		Only use this opcode for something else if you're sure
+		you *really* know what you are doing... :)
 Parameters:	SYMBOL: Any valid symbol name.
 		VALUE: Any formula the value parser accepts.
 Example:	see "!do" below
@@ -549,6 +569,34 @@ Examples:	; a loop with conditions at both start and end
 		!do until 3 = 4 {     } while 3 < 4
 
 
+Call:		!while [CONDITION] { BLOCK }
+Purpose:	Looping assembly. The block of statements can be
+		parsed several times, depending on the given
+		condition.
+		The condition is parsed in every repetition before the
+		actual block. If it isn't met when first checked, the
+		block will be skipped.
+Parameters:	CONDITION: Any formula the value parser accepts, but
+		it must be solvable even in the first pass.
+		BLOCK: A block of assembler statements.
+Examples:	; a loop with a counter
+		!set a = 0			; init loop counter
+		!while a < 6 {
+			lda #a
+			sta label + a
+			!set a = a + 1
+		}
+
+		; a loop depending on program counter
+		!while * < $c000 { nop }
+
+		; a never ending loop - this will cause an error
+		!while 3 < 4 { nop }
+
+		; an empty loop - this will hang ACME
+		!while 3 != 4 {     }
+
+
 Call:		!endoffile
 Purpose:	Stop processing the current source file. Using this
 		pseudo opcode you can add explanatory text inside your
@@ -563,22 +611,24 @@ Example:	rts	; some assembler mnemonic
 		"!eof" is reached.
 
 
-Call:		!warn STRING_VALUE [, STRING_VALUE]*
+Call:		!warn VALUE [, VALUE]*
 Purpose:	Show a warning during assembly.
-Parameters:	STRING_VALUE: Can be either a string given in double
-		quotes or any formula the value parser accepts.
-		Numbers will be output in decimal _and_ hex format.
+Parameters:	VALUE: Can be either a string given in double quotes
+		or any formula the value parser accepts.
+		Integer numbers will be output in both decimal _and_
+		hex formats.
 Example:	!if * > $a000 {
 			!warn "Program reached ROM: ", * - $a000, " bytes overlap."
 		}
 
 
-Call:		!error STRING_VALUE [, STRING_VALUE]*
+Call:		!error VALUE [, VALUE]*
 Purpose:	Generate an error during assembly (therefore, no
 		output file will be generated).
-Parameters:	STRING_VALUE: Can be either a string given in double
-		quotes or any formula the value parser accepts.
-		Numbers will be output in decimal _and_ hex format.
+Parameters:	VALUE: Can be either a string given in double quotes
+		or any formula the value parser accepts.
+		Integer numbers will be output in both decimal _and_
+		hex formats.
 Example:	rts	; end of some function
 	start	!source "colors.a"
 	end	!if end - start > 256 {
@@ -586,12 +636,13 @@ Example:	rts	; end of some function
 		}
 
 
-Call:		!serious STRING_VALUE [, STRING_VALUE]*
+Call:		!serious VALUE [, VALUE]*
 Purpose:	Generate a serious error, immediately stopping
 		assembly.
-Parameters:	STRING_VALUE: Can be either a string given in double
-		quotes or any formula the value parser accepts.
-		Numbers will be output in decimal _and_ hex format.
+Parameters:	VALUE: Can be either a string given in double quotes
+		or any formula the value parser accepts.
+		Integer numbers will be output in both decimal _and_
+		hex formats.
 Example:	!source "part1.a"	; sets part1_version
 		!source "part2.a"	; sets part2_version
 		!if part1_version != part2_version {
@@ -611,9 +662,9 @@ Parameters:	TITLE: The macro's desired name (same rules as for
 		could want this is beyond me).
 		SYMBOL: The desired name for the parameter value at
 		call time. Normally, these parameter symbols should be
-		local (first character a dot), as different macro
-		calls will almost for sure have different parameter
-		values.
+		local (first character a '.' or a '@'), as different
+		macro calls will almost for sure have different
+		parameter values.
 		If you prefix SYMBOL with a '~' character, it will be
 		called by reference, not by value: Changing the value
 		inside the macro will result in the "outer" symbol to
@@ -740,8 +791,10 @@ Purpose:	Set program counter to given value and start new
 		issued. Because some people do this overlapping
 		on purpose, the warnings can be suppressed using
 		modifier keywords.
-		Future versions of ACME may issue errors instead of
-		warnings.
+		Using the "--strict-segments" CLI switch, these
+		warnings can be turned onto errors. Future versions of
+		ACME may do that by default - so if needed, use the
+		modifier keywords.
 Parameters:	EXPRESSION: Any formula the value parser accepts, but
 		it must be solvable even in the first pass.
 		MODIFIER: "overlay" or "invisible" (without quotes):
@@ -847,6 +900,13 @@ Examples:	ldx #.shifted_end - .shifted_start
 		}
 	.shifted_end
 
+Miscellaneous:	If you need to convert a label or the program counter
+		from its "pseudopc" to its "real" value, you can do
+		that using the "&" operator. Given the example above,
+		the symbol ".target" will evaluate to the value $0400,
+		but "&.target" will evaluate to the same value as
+		".shifted_start" will.
+
 
 ----------------------------------------------------------------------
 Section:   CPU support pseudo opcodes (especially 65816 support)
@@ -856,23 +916,25 @@ Call:		!cpu KEYWORD [ { BLOCK } ]
 Purpose:	Select the processor to produce code for. If this PO
 		isn't used, ACME defaults to the 6502 CPU (or to the
 		one selected by the "--cpu" command line option).
-		ACME will give errors if you try to assemble commands
-		the chosen CPU does not have. You can change the
-		chosen CPU at any time. When used with block syntax,
-		the previously chosen CPU value is restored
-		afterwards.
+		ACME will give errors if you try to assemble
+		instructions the chosen CPU does not support. You can
+		change the chosen CPU at any time. When used with
+		block syntax, the previously chosen CPU value is
+		restored afterwards.
 Parameters:	KEYWORD: Currently valid keywords are:
-			6502	for the original MOS 6502
-			6510	6502 plus undocumented opcodes
-			65c02	6502 plus BRA,PHX/Y,PLX/Y,STZ,TRB/TSB
-			r65c02	65c02 plus BBRx, BBSx, RMBx, SMBx
-			w65c02	r65c02 plus STP/WAI
-			65816	65c02 plus 16/24-bit extensions
-			65ce02	r65c02 plus Z reg, long branches, ...
-			4502	65ce02 with MAP instead of AUG
-			c64dtv2	6502 plus BRA/SAC/SIR plus some of the
+		6502		for the original MOS 6502
+		nmos6502	6502 plus undocumented opcodes
+		6510		(alias for "nmos6502")
+		65c02		6502 plus BRA,PHX/Y,PLX/Y,STZ,TRB/TSB
+		r65c02		65c02 plus BBRx, BBSx, RMBx, SMBx
+		w65c02		r65c02 plus STP/WAI
+		65816		65c02 plus 16/24-bit extensions
+		65ce02		r65c02 plus Z reg, long branches, ...
+		4502		65ce02 with MAP instead of AUG
+		m65		4502 plus 32-bit extensions
+		c64dtv2		6502 plus BRA/SAC/SIR plus some of the
 				undocumented opcodes
-			See "docs/cputypes.txt" for more info.
+			See "docs/cputypes/all.txt" for more info.
 		BLOCK: A block of assembler statements.
 Examples:	!if cputype = $65c02 {
 			!cpu 65c02 {	; temporarily allow 65c02 stuff
@@ -885,7 +947,7 @@ Examples:	!if cputype = $65c02 {
 			pla
 		}
 		rts
-		!cpu 65816	; allow 65816 commands from here on
+		!cpu 65816	; now allow instructions of 65816 cpu
 
 
 Call:		!al [ { BLOCK } ]
@@ -933,6 +995,8 @@ Parameters:	BLOCK: A block of assembler statements
 		If no block is given, only the current statement will
 		be affected, which should then be an explicit symbol
 		definition.
+		To make use of this feature, you need to use the
+		"-Wtype-mismatch" CLI switch.
 Aliases:	"!addr"
 Examples:	!addr	k_chrout = $ffd2	; this is an address
 			CLEAR = 147		; but this is not
@@ -958,6 +1022,10 @@ Purpose:	Use PetSCII as the text conversion table. Now
 		superseded by the "!convtab" pseudo opcode.
 Old usage:	!cbm		; gives "use !ct pet instead" error
 Now use:	!convtab pet	; does the same without error
+		If you just want to assemble an old source code
+		without touching it, use the "--dialect" CLI switch:
+		Using "--dialect 0.94.6" or earlier will assemble this
+		pseudo opcode without throwing an error.
 
 
 Call:		!subzone [TITLE] { BLOCK }
@@ -972,6 +1040,10 @@ Old usage:	!subzone graphics {
 Now use:	!zone graphics {
 			!source "graphics.a"
 		}
+		If you just want to assemble an old source code
+		without touching it, use the "--dialect" CLI switch:
+		Using "--dialect 0.94.6" or earlier will assemble this
+		pseudo opcode without throwing an error.
 
 
 Call:		!realpc
@@ -985,3 +1057,8 @@ Old usage:	!pseudopc $0400
 Now use:	!pseudopc $0400 {
 			; imagine some code here...
 		}
+		If you just want to assemble an old source code
+		without touching it, use the "--dialect" CLI switch:
+		Using "--dialect 0.94.6" or earlier will assemble this
+		pseudo opcode without throwing an error.
+		Using "--dialect 0.85", not even a warning is thrown.

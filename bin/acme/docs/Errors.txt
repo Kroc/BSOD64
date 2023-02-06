@@ -38,17 +38,29 @@ Assembling buggy JMP($xxff) instruction
     location ARGUMENT + 1, but from ARGUMENT - 255. Therefore ACME
     issues this warning if you are about to generate such an
     instruction.
-    Note that this warning is only given for CPU types 6502 and 6510,
-    because 65c02 and 65816 have been fixed in this respect.
+    Note that this warning is only given for some CPU types (6502,
+    nmos6502/6510, c64dtv2) because later ones like 65c02 and 65816
+    have been fixed in this regard.
 
 Assembling unstable ANE #NONZERO instruction
 Assembling unstable LXA #NONZERO instruction
-    These warnings are only ever given for CPU type 6510. ANE and LXA
-    are undocumented ("illegal") opcodes of this CPU, and they only
-    work reliably if the argument is zero or the accumulator contains
-    0xff.
+    These warnings are only ever given for CPU type nmos6502 (6510).
+    ANE and LXA are undocumented ("illegal") opcodes of this CPU, and
+    they only work reliably if the argument is zero or the accumulator
+    contains 0xff.
     Therefore ACME issues these warnings if it is about to generate
     these instructions with a non-zero argument.
+
+Binary literal without any digits.
+Hex literal without any digits.
+    A special literal was started, but then no digits followed. Expect
+    this to become an error in future!
+
+Binary literal with strange number of digits.
+    This warning is given if the number of digits in a binary literal
+    is not a multiple of four. This is useful when you meant to write
+    %#....... but actually wrote %#........ by mistake. See? :P
+    You can disable this warning using the CLI switch "-Wno-bin-len".
 
 Bug in ACME, code follows
     A situation has been encountered implying there is a bug in ACME.
@@ -59,7 +71,7 @@ C-style "==" comparison detected.
 
 Converted to integer for binary logic operator.
     Applying binary logic to float values does not make much sense,
-    therefore floats will be converted to integer in this case.
+    therefore floats will be converted to integer in such cases.
 
 "EOR" is deprecated; use "XOR" instead.
     This means the operator, not the mnemonic.
@@ -67,7 +79,9 @@ Converted to integer for binary logic operator.
 Found old "!for" syntax.
     Please update your sources to use the new "!for" syntax. See
     AllPOs.txt for details.
-    You can suppress this warning using the "-Wno-old-for" switch.
+    You can suppress this warning using the "--dialect" or the
+    "-Wno-old-for" CLI switch.
+    ("-Wno-old-for" does _exactly_ the same as "--dialect 0.94.8")
 
 Found new "!for" syntax.
     When using the "-Wno-old-for" switch to disable the warning about
@@ -108,19 +122,21 @@ Output file already chosen.
 Segment reached another one, overwriting it.
     The program counter has just reached the start of another segment.
     Because some people might want to assemble "onto" a binary file
-    that was loaded before, this warning can be switched off using
-    modifier keywords when changing the program counter via "* =".
-    Future versions of ACME might throw an error instead of a warning
-    in this case.
+    that was loaded before, this warning can be inhibited using
+    modifier keywords when changing the program counter via "*=".
+    For extra safety you can also turn this warning into an error
+    using the "--strict-segments" CLI switch. In future versions of
+    ACME this might become the default.
 
 Segment starts inside another one, overwriting it.
-    The given value in a "* =" command is located inside another
+    The given value in a "*=" command is located inside another
     segment. Because some people might want to assemble "onto" a
-    binary file that was loaded before, this warning can be switched
-    off using modifier keywords when changing the program counter via
-    "* =".
-    Future versions of ACME might throw an error instead of a warning
-    in this case.
+    binary file that was loaded before, this warning can be inhibited
+    using modifier keywords when changing the program counter via
+    "*=".
+    For extra safety you can also turn this warning into an error
+    using the "--strict-segments" CLI switch. In future versions of
+    ACME this might become the default.
 
 Symbol list file name already chosen.
     The "!sl" command was given more than once (or in addition to the
@@ -180,18 +196,34 @@ Section:   Errors during assembly
 "!cbm" is obsolete; use "!ct pet" instead.
     This is given when the now obsolete "!cbm" pseudo opcode is
     encountered.
+    If you want to assemble an old source code without first updating
+    it, you can use the "--dialect" CLI switch to make ACME mimic an
+    older version.
 
 "!pseudopc/!realpc" is obsolete; use "!pseudopc {}" instead.
     This is given when one of the now obsolete !pseudopc/!realpc
     pseudo opcodes is encountered.
+    If you want to assemble an old source code without first updating
+    it, you can use the "--dialect" CLI switch to make ACME mimic an
+    older version.
 
 "!subzone {}" is obsolete; use "!zone {}" instead.
     This is given when the now obsolete "!subzone" pseudo opcode is
     encountered.
+    If you want to assemble an old source code without first updating
+    it, you can use the "--dialect" CLI switch to make ACME mimic an
+    older version.
 
 !error: ...
     This is given when the pseudo opcode "!error" is executed. The
     actual message varies according to the pseudo opcode's arguments.
+
+After ELSE, expected block or IF/IFDEF/IFNDEF.
+    There is something strange after ELSE: It must be "if", "ifdef",
+    "ifndef" or an opening brace.
+
+Argument out of range.
+    You called arcsin/arccos with something not in the [-1, 1] range.
 
 Cannot open input file.
     ACME had problems opening an input file ("!bin", "!convtab" or
@@ -204,20 +236,36 @@ Conversion table incomplete.
 Division by zero.
     Guess what - you attempted to divide by zero.
 
+Expected ELSE or end-of-statement.
+    There is something after the closing brace of an IF block that is
+    not an ELSE.
+
+Expected end-of-statement after ELSE block.
+    There is something after the closing brace of an ELSE block.
+
 Exponent is negative.
     Using negative exponents only give sensible results when using
     floating point maths.
+
+Expression did not return a number.
+    An expression returned a string or a list but a number (integer or
+    float) was expected.
 
 File name quotes not found ("" or <>).
     File names have to be given in quotes. Either "" quoting for files
     located in the current directory or <> quoting for library files.
 
+Force bits can only be given to numbers.
+    You tried to give a force bit to a symbol and then assign a string
+    or list to it.
+
 Found '}' instead of end-of-file.
     ACME encountered a '}' character when it expected the file to end
     instead (because no blocks were open).
 
-Garbage data at end of statement.
-    There are still arguments when there should not be any more.
+Garbage data at end of statement (unexpected 'CHAR').
+    There are still arguments when there should not be any more. The
+    given character is the one where end-of-line was expected.
 
 Hex digits are not given in pairs.
     The two digits of a hex byte are separated by another character,
@@ -233,6 +281,12 @@ Illegal combination of command and postfix.
 
 Illegal postfix.
     You used a postfix other than "+1", "+2" or "+3".
+
+Index is undefined.
+    You attempted an indexing operation with some undefined symbol.
+
+Index out of range.
+    The value for an indexing operation wasn't in the allowed range.
 
 Macro already defined.
     Macros can only be defined once. If you define a macro twice, ACME
@@ -261,10 +315,17 @@ Negative value - cannot choose addressing mode.
     your program to use positive addresses instead.
 
 No string given.
-    ACME expects a string but doesn't find it.
+    ACME expects a string but doesn't find it, or the string is empty.
 
 Number out of range.
     A value is too high or too low.
+    This can also mean the desired addressing mode is not available,
+    as in "sty $e000, x".
+
+Operation not supported: Cannot apply "OP" to "TYPE".
+Operation not supported: Cannot apply "OP" to "TYPE" and "TYPE".
+    You tried to use an operator on the wrong type(s) of argument(s),
+    like indexing a float or negating a string.
 
 Program counter is unset.
     You didn't set the program counter, so ACME didn't know where to
@@ -276,9 +337,12 @@ Quotes still open at end of line.
 Source file contains illegal character.
     Your source code file contained a null byte.
 
+String length is not 1.
+    You tried something like LDA#"X" with an illegal string length.
+
 Symbol already defined.
-    You defined a symbol that already had a different value. To change
-    a symbol's value, use the "!set" pseudo opcode.
+    You defined a symbol that already had a different type or value.
+    To change a symbol's type or value, use the "!set" pseudo opcode.
 
 Syntax error.
     Guess what - there's a syntax error.
@@ -294,9 +358,14 @@ Target out of range (N; M too far).
     difference to the limit - so if you succeed in optimizing M bytes
     away, the code would assemble.
 
+The chosen CPU uses opcode 0xXY as a prefix code, do not use this mnemonic!
+    The mnemonic is valid, but should not be used on this CPU. If you
+    know better, you can get around this error like this:
+	!cpu ANY_OTHER_CPU { PROBLEMATIC_MNEMONIC }
+
 There's more than one character.
-    You used a text string in an arithmetic expression, but the string
-    contained more than a single character.
+    You used a text string containing more than one character in a
+    situation where only a string with length one is allowed.
 
 Too late for postfix.
     You can only postfix symbols at the start, before they are used for
@@ -305,11 +374,25 @@ Too late for postfix.
 Too many '('.
     A formula ends before all parentheses were closed.
 
-Too many ')'.
-    There are more closing than opening parentheses in a formula.
+Un-pseudopc operator '&' can only be applied to labels.
+    You tried to apply the operator '&' to something that is not a
+    label. This operator only works on labels and on '*' (the program
+    counter), it cannot be used on other objects.
+
+Un-pseudopc operator '&' has no !pseudopc context.
+    You either tried to apply the operator '&' to something that is
+    not an implicitly defined label, but the result of an explicit
+    symbol assignment (like the result of a calculation).
+    Or you applied the operator to a label that was defined outside of
+    a !pseudopc block, or, more generally, the number of '&'
+    characters used was larger than the number of !pseudopc blocks
+    around the definition.
 
 Unknown encoding.
     You used the "!convtab" command with a keyword ACME does not know.
+
+Unknown function.
+    You used a mathematical function ACME does not know.
 
 Unknown operator.
     You used an arithmetic/logical operator ACME does not know.
@@ -323,8 +406,21 @@ Unknown processor.
 Unknown pseudo opcode.
     You have mistyped a "!" command.
 
-Unknown "* =" segment modifier.
+Unknown "*=" segment modifier.
     You used a modifier keyword ACME does not know.
+
+Unsupported backslash sequence.
+    The character following the backslash was not one of the allowed
+    ones. Backslash escaping was added in release 0.97 of ACME.
+    If you want to assemble an old source code without first updating
+    it, you can use the "--dialect" CLI switch to make ACME mimic an
+    older version.
+
+Unterminated index spec.
+    An index was started with '[' but did not end with ']'.
+
+Unterminated list.
+    A list was started with '[' but did not end with ']'.
 
 Value not defined (SYMBOL NAME).
     A value could not be worked out. Maybe you mistyped a symbol name.
@@ -374,14 +470,17 @@ Syntax error.
 
 Too deeply nested. Recursive macro calls?
     The only reason for ACME to have a limit on macro call nesting
-    at all is to find infinite recursions. Current limit is 64.
+    at all is to find infinite recursions.
+    The default limit is 64, this can be changed using the
+    "--maxdepth" CLI switch.
 
 Too deeply nested. Recursive "!source"?
     The only reason for ACME to still have a limit on "!source"
-    nesting at all is to find infinite recursions. Current limit is
-    64.
+    nesting at all is to find infinite recursions.
+    The default limit is 64, this can be changed using the
+    "--maxdepth" CLI switch.
 
-Value not yet defined.
+Value not defined.
     A value could not be worked out. Maybe you mistyped a symbol name.
     Whether this is given as a "normal" or as a serious error depends
     on the currently parsed pseudo opcode.
@@ -404,45 +503,89 @@ No output file specified (use the "-o" option or the "!to" pseudo opcode).
 Section:   Bugs in ACME
 ----------------------------------------------------------------------
 
-    The warning "Bug in ACME, code follows" is always followed by a
-    serious error message, stopping assembly. The second message
-    actually gives a hint about the bug's location in the source code.
-    If you ever get this combination of warning and serious error,
-    please send me an e-mail and tell me about it. If possible,
-    include a piece of source code that triggers it.
+The warning "Bug in ACME, code follows" is always followed by a
+serious error message, stopping assembly. The second message actually
+gives a hint about the bug's location in the source code.
+If you ever get this combination of warning and serious error, please
+send me an e-mail and tell me about it. If possible, include a piece
+of source code that triggers it.
+Please don't get this wrong - there are no known bugs. I just left
+some debugging code in place in case there is a bug I failed to notice
+during testing. In practice, this warning is not expected to be given
+at all. That's the reason why I want to be notified if it *does*
+decide to show up.
 
-    Please don't get this wrong - there are no known bugs. I just left
-    some debugging code in place in case there is a bug I failed to
-    notice during testing. In practice, this warning is not expected
-    to be given at all. That's the reason why I want to be notified if
-    it *does* decide to show up.
+The hint messages are of no real interest to the end user, but here
+they are for completeness' sake:
 
-    The hint messages are of no real interest to the end user, but here
-    they are for completeness' sake.
 
-IllegalGroupIndex
-    The mnemonic tree contains a group that I didn't add.
+ArgStackEmpty
+    There was no data for a monadic operator to work on.
+
+ArgStackNotEmpty
+    The expression parser has finished though there are still
+    arguments left to process.
+
+ExtendingListWithItself
+    There were multiple references to the same list.
+
+ForceBitZero
+    The function to handle force bits was called without a force bit.
 
 IllegalBlockTerminator
     A RAM block (macro or loop) was terminated incorrectly.
 
-IllegalOperatorHandle
-    The expression parser found an operator that does not exist.
+IllegalGroupIndex
+    The mnemonic tree contains a group that I didn't add.
+
+IllegalIfMode
+    A sanity check in the if/ifdef/ifndef/else code failed.
 
 IllegalImmediateMode
     The mnemonic tree contains invalid info about the size of immediate
     arguments.
 
-OperandStackNotEmpty
-    The expression parser has finished though there are still operands
-    left to parse.
+IllegalInputSource
+    Input is taken neither from a file nor from a RAM block.
+
+IllegalNumberTypeX
+    A number was neither INT nor FLOAT nor UNDEFINED.
+
+IllegalObjectType
+    A symbol is used that is neither number nor list nor string.
+
+IllegalOperatorId
+IllegalOperatorGroup
+    The expression parser found an operator that does not exist.
+
+IllegalSymbolNameLength
+    A sanity check on string lengths failed.
+
+NotEnoughArgs
+    There was not enough data for a dyadic operator to work on.
+
+NullTypeObject
+ObjectHasNullType
+    A symbol is used that does not have a type (number/list/string)
+    associated with it.
+
+OperatorIsNotDyadic
+OperatorIsNotMonadic
+    A function was passed the wrong type of operator.
 
 OperatorStackNotEmpty
     The expression parser has finished though there are still
-    operators left to parse.
+    operators left to process.
+
+PartialEscapeSequence
+    Buffered data ended on a backslash, which shouldn't be possible.
+
+SecondArgIsNotAnInt
+    A sanity check failed: An argument should have been converted to
+    integer but wasn't.
 
 StrangeInputMode
     The input state machine has reached a state that does not exist.
 
-StrangeParenthesis
+StrangeOperator
     The expression parser found a non-existing operator.

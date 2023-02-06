@@ -30,4 +30,6 @@ Just in case you wonder:
     Please *don't* look at it. :)
 
     "trigono.o" is a simple example written to test the floating-point
-    capabilities.
+    capabilities. Because floats are prone to rounding errors, there
+    are two different "expected" outputs: these were generated on
+    different architectures, they only differ in one byte ($7f/$80).

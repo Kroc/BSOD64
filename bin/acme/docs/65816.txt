@@ -30,12 +30,13 @@ According to WDC's official syntax for 65816 assembly language, the
 argument order of the MVN and MVP instructions differs between
 assembly language and machine code.
 To copy bytes from bank $ab to bank $cd, use the following statement:
-    mvn $ab, $cd ; source bank $ab, destination bank $cd
+    mvn $ab, $cd        ; source bank $ab, destination bank $cd
+or
+    mvn #$ab, #$cd      ; source bank $ab, destination bank $cd
 ACME will then produce the following machine code:
-    $54 $cd $ab  ; opcode mvn, destination bank $cd, source bank $ab
+    $54 $cd $ab ; opcode mvn, destination bank $cd, source bank $ab
 
-ACME 0.05 and earlier did it the wrong way. Several other assemblers
-still do. Make sure your sources are correct.
+ACME 0.05 and earlier did it the wrong way.
 
 
 ----------------------------------------------------------------------

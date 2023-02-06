@@ -1,4 +1,4 @@
-;ACME 0.94.4
+;ACME 0.96.4
 
 !ifdef lib_cbm_c128_petscii_a !eof
 lib_cbm_c128_petscii_a = 1
@@ -25,8 +25,8 @@ petscii_LBLUE		= 154
 petscii_GRAY3		= 155:	petscii_DWHITE		= 155:	petscii_LGRAY		= 155
 
 ; switching character set
-petscii_LOCK		=  11	; forbid CBM-shift (C64 uses 8)
-petscii_UNLOCK		=  12	; allow CBM-shift (C64 uses 9)
+petscii_LOCK		=  11	; forbid CBM-shift (C64 uses 8 instead)
+petscii_UNLOCK		=  12	; allow CBM-shift (C64 uses 9 instead)
 petscii_LOWERCASE	=  14	; switch to lowercase/uppercase character set
 petscii_UPPERCASE	= 142	; switch to uppercase/graphics character set
 
@@ -39,12 +39,12 @@ petscii_F7		= 136:	petscii_F8		= 140
 ; C128-specific stuff
 petscii_UNDERLINEON	=   2
 petscii_UNDERLINEOFF	= 130
-petscii_FLASHON		=  15
-petscii_FLASHOFF	= 143
+petscii_FLASHON		=  15	; (264 series machines use 130 instead)
+petscii_FLASHOFF	= 143	; (264 series machines use 131 instead)
 petscii_BELL		=   7
 petscii_TAB		=   9
 petscii_SETTAB		=  24
 petscii_LINEFEED	=  10
 petscii_ESCAPE		=  27
 petscii_SHIFTSTOP	= 131
-petscii_HELP		= 132
+petscii_HELP		= 132	; (264 series machines use 140 instead)

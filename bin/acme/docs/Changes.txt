@@ -13,6 +13,88 @@ outlining the platform specific changes.
 
 
 ----------------------------------------------------------------------
+Section:   New in release 0.97
+----------------------------------------------------------------------
+
+FINALLY strings can be assigned to symbols!
+    "anything in double quotes" is a string, while characters in
+    single quotes are, just as before, immediately converted to their
+    character code. Go and read "docs/Upgrade.txt" to learn about
+    compatibility issues.
+Added backslash escaping in all string literals:
+    \0 is a null byte, \t is a TAB, \n is a line feed, \r is a
+    carriage return, \" is a double quote, \' is a single quote and
+    \\ is a backslash. Go and read "docs/Upgrade.txt" to learn about
+    compatibility issues.
+Added "--dialect" CLI switch:
+    Because string symbols and backslash escaping introduce a few
+    incompatibilities to older versions, ACME can now be told to mimic
+    the behavior of older versions. So it's still possible to assemble
+    older sources.
+Added lists:
+    Lists can be used to pass an arbitrary number of arguments to
+    macros, or to store any number of items (including other lists) in
+    a single symbol. Example:   my_list = [1, 2, label, "string", 9]
+Added "len()" operator:
+    This returns the number of elements in a string or list.
+Added "[]" operator (for indexing):
+    This returns a single element from a string or list. Negative
+    indices are supported as well, they access the string/list from
+    the other end. Examples:   a = my_list[2]   b = my_string[-1]
+Added "&" operator:
+    This operator converts labels or the program counter from its
+    value inside a "!pseudopc" block to the value outside of that
+    block. Thanks to markusC64 for the suggestion!
+Added "!while {}" pseudo opcode.
+Added "else if", "else ifdef" and "else ifndef" possibilities.
+Added "M65" cpu:
+    This instruction set includes the MEGA65 extensions, namely 32-bit
+    pointers and 32-bit data operations using prefix bytes.
+Added "NMOS6502" as an alias for "6510" cpu.
+Improved NMOS6502/6510 mode:
+    DOP and TOP can now also be written as NOP.
+Improved 65816 mode:
+    MVN and MVP can now also be written with '#' before arguments.
+Added "--test" CLI switch:
+    This is for people who want to help test experimental features.
+Improved error messages:
+    "Garbage data at end of statement" now includes the unexpected
+    character.
+    "Symbol not defined" is only output once per symbol.
+Added warning:
+    ACME complains about binary literals with an "unusual" number of
+    digits. Thanks to groepaz for the suggestion!
+    The warning can be disabled using the "-Wno-bin-len" CLI switch.
+Added warning:
+    All mnemonics without indirect addressing now complain about
+    unneeded parentheses.
+Fix: Characters are now unsigned (had been architecture-dependent).
+Improved error handling of "--cpu" and "--format" switches.
+Added opcode table for NMOS6502 cpu to docs.
+Added some test sources.
+Added support for "hashbang" lines (if file starts with a '#'
+    character, the first line is ignored)
+Fixed some minor bugs no-one ever seems to have encountered.
+Rewritten "docs/Upgrade.txt".
+
+
+----------------------------------------------------------------------
+Section:   New in release 0.96.5
+----------------------------------------------------------------------
+
+Allowed C++-style comments via "//". Thanks to awsm for the
+    suggestion (and please accept my apologies for taking so long to
+    release this)
+Added "--ignore-zeroes" CLI switch. This disables the "leading zeroes
+    determine number size" algorithm. Thanks to groepaz for the
+    suggestion.
+Added "--strict-segments" CLI switch. This changes warnings about
+    overlapping memory segments into errors. Thanks to groepaz for the
+    suggestion.
+Added 6502 family tree to docs/cpu_types/all.txt
+
+
+----------------------------------------------------------------------
 Section:   New in release 0.96.4
 ----------------------------------------------------------------------
 
@@ -133,8 +215,9 @@ Section:   New in release 0.95.3
 
 Added "c64dtv2" cpu type so you can use its SIR, SAC and BRA opcodes;
     along with the undocumented ("illegal") opcodes of the 6510.
-Added Martin Piper's "--msvc" patch so error output can be configured
-    to be in Visual Studio format.
+Added "--msvc" CLI switch so error output can be configured to be in
+    Visual Studio format. Thanks to Martin Piper for writing this
+    patch!
 Merged third-party patch (who wrote it?) to output label dump in VICE
     format. Still needs work to be configurable about the types of
     symbols actually output.

@@ -6,15 +6,15 @@
 
                           - free  software -
 
-                       (C) 1998-2017 Marco Baye
+                       (C) 1998-2020 Marco Baye
 
 
 ----------------------------------------------------------------------
 Section:   Copyright
 ----------------------------------------------------------------------
 
-ACME - a crossassembler for producing 6502/6510/65c02/65816 code.
-Copyright (C) 1998-2017 Marco Baye
+ACME - a crossassembler for producing 6502/65c02/65816 code.
+Copyright (C) 1998-2020 Marco Baye
 The ACME icon was designed by Wanja "Brix" Gayk
 
 This program is free software; you can redistribute it and/or modify
@@ -39,9 +39,9 @@ Section:   Introduction
 
 ACME is a crossassembler for the 65xx range of processors. It knows
 about the standard 6502, the 65c02 and the 65816. It also supports
-the undocumented ("illegal") opcodes of the 6510 processor (a 6502-
-variant that is used in the Commodore C=64), and the extensions added
-in the C64DTV2.
+the undocumented ("illegal") opcodes of the NMOS versions of the 6502,
+like the 6510 variant that is used in the Commodore C=64, and it also
+supports extensions to the intruction set done by other parties.
 
 This text and the other files in the same directory only describe the
 basic functions independent of the platform used. There should be
@@ -61,14 +61,16 @@ The files in the docs directory and what they contain:
     Help.txt       ...is this text.
     Illegals.txt   Support for undocumented opcodes
     Lib.txt        Information about the library
-    QuickRef.txt   All the basic stuff about ACME
+    QuickRef.txt   All the basic stuff about ACME       <- START HERE!
     Source.txt     How to compile ACME
     Upgrade.txt    Incompatibilities to earlier versions
-    cputypes.txt   Instruction sets of target CPUs
+    cputypes/      Instruction sets of target CPUs
 
-IMPORTANT: If you upgrade from ACME 0.05 or earlier, don't forget to
-read the file "Upgrade.txt" - release 0.07 and all later ones are
-slightly incompatible to 0.05 and earlier.
+IMPORTANT: If you upgrade from an earlier version of ACME, don't
+forget to read the files "Changes.txt" and "Upgrade.txt". Adding new
+features can not always be done in a 100% compatible way, so newer
+version may behave slightly different. To solve this problem, the
+"--dialect" CLI switch can be used.
 
 If you want to start using ACME right away, read the file
 "QuickRef.txt", it contains the main help text.
@@ -79,15 +81,14 @@ Section:   What it can and does
 ----------------------------------------------------------------------
 
 ACME is a crossassembler.
-ACME can produce code for the 6502, 6510, 65c02 and 65816 processors.
+ACME can produce code for the 6502, 65c02 and 65816 processors.
 It does this *fast*.
 It can produce at most 64 KBytes of code.
 You can use global labels, local labels and anonymous labels.
 It is fast.
 You can use global and local macros.
 You can use conditional assembly.
-You can use looping assembly (There are two ways to do this; a very
-    simple and a very flexible one).
+You can use looping assembly.
 You can include other source files.
 You can include binary files (either whole or parts) directly into the
     output.
@@ -100,6 +101,7 @@ ACME's maths parser has no problems concerning parentheses and
     indirect addressing modes.
 ACME's maths parser knows a shit load of different operations.
 ACME supports both integer and floating point maths operations.
+In addition to numbers, symbols can also hold strings or lists.
 You can dump the global symbols into a file.
 ACME supports a library of commonly used macros and symbols.
 It always takes as many passes as are needed.

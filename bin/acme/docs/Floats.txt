@@ -17,7 +17,7 @@ with floats and returns a float. Applies to sin(), cos(), tan(),
 arcsin(), arccos(), arctan() and float(): These are always computed in
 float mode and always return floats.
 
-b) if a maths operation is useles when done with floats, it is done
+b) if a maths operation is useless when done with floats, it is done
 with integers and returns an integer. Applies to NOT, AND, OR, XOR,
 MOD, DIV, LSR, lowbyteof, highbyteof, bankbyteof and int(). These are
 always computed in integer mode and always return integers.
