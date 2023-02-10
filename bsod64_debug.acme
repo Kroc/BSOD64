@@ -1,0 +1,823 @@
+; BSOD64 (C) Kroc Camen, 2019-2020
+; licenced under BSD 2-clause
+;===============================================================================
+
+.bsod_debug:
+;===============================================================================
+; launch the debugger UI
+;-------------------------------------------------------------------------------
+        ; make working copies of the frozen registers
+        ;
+        lda .frzn_sp            ; take the frozen stack pointer
+        sta .work_sp            ;  and make a working copy
+        lda .frzn_y             ; make a working (modifiable) copy
+        sta .work_y             ; of the frozen Y register value
+        lda .frzn_x             ; make a working (modifiable) copy
+        sta .work_x             ; of the frozen X register value
+        lda .frzn_a             ; make a working (modifiable) copy
+        sta .work_a             ; of the frozen A register value
+        lda .frzn_f             ; make a working (modifiable) copy
+        sta .work_f             ; of the frozen processor flags
+        lda .frzn_pc_lo         ; frozen program counter lo-byte
+        sta .work_pc_lo         ; make a working copy
+        lda .frzn_pc_hi         ; frozen program counter hi-byte
+        sta .work_pc_hi         ; make a working copy
+
+        ; configure debugger:
+        ;-----------------------------------------------------------------------
+        ; set the memory cursor to the working program counter, i.e.
+        ; the memory viewer window will be focused on the freeze-point
+        lda .work_pc_lo
+        sta .bsod_memaddr_lo
+        lda .work_pc_hi
+        sta .bsod_memaddr_hi
+
+        ; the memory viewer window is always aligned to the nearest 8-bytes;
+        ; take the cursor address and round it to the nearest 8-bytes
+        lda .bsod_memaddr_lo
+        and # %11111000         ; align to every 8 bytes
+        sta .bsod_memview_lo
+        lda .bsod_memaddr_hi
+        sta .bsod_memview_hi
+
+        ; fallthrough
+        ; ...
+
+.bsod_redraw:
+;===============================================================================
+; redraw the entire BSOD64 screen:
+;
+;-------------------------------------------------------------------------------
+        ; print the static elements of the screen
+        ; (title, legends, key-commands etc)
+        jsr .bsod_print_str_inline
+            ; configure screen + PETSCII
+            !pet    .PET_CLR        ; clear the screen
+            !pet    .PET_CASEON     ; enable case-switching,
+            !pet    .PET_LCASE      ; switch to lower-case,
+            !pet    .PET_CASEOFF    ; disable case-switching (e.g. SHIFT+C=)
+            ; BSOD64 title:
+            !pet    .PET_CYAN, "BSOD64v0.0"
+            ; registers legend:
+            !pet    .PET_GREEN
+            !pet    .STR_POS, 2, 18, "PC:  A: X: Y:"
+            ; flags legend: ("nv-bdiz")
+            !pet    .STR_POS, 2, 32, "nv-bdizc"
+            ; banks legend:
+            !pet    .STR_POS, 2, 9, "89ABCDEF"
+
+            ; write the menu on the bottom of the screen
+            !byte   .STR_KEYPOS, 24, 0
+            !pet    .PET_F1, "RAM " ;;, .STR_KEY
+            ;;!pet    .PET_F3, "VIC ", .STR_KEY
+            ;;!pet    .PET_F5, "DISK"
+            ; registers title
+            !pet    .STR_KEYPOS, 0, 18, "R", "REGISTERS"
+            ; flags title
+            !pet    .STR_KEYPOS, 0, 32, "F", "FLAGS"
+            ; stack title
+            !pet    .STR_KEYPOS, 5, 32, "S", "STACK"
+            ; banks title
+            !pet    .STR_KEYPOS, 2, 0, "B", "BANKS"
+            ; memory viewer title
+            !byte   .STR_KEYPOS, 5, 0
+            !pet    "M", "MEMORY ", .STR_KEY
+            !pet    "G", "GOTO", .STR_END
+
+        ; draw the lines across the screen
+        ldx # 39
+        ldy # $63
+-       lda # $64
+        sta .screen+( 6 * 40), x
+        tya
+        sta .screen+(23 * 40), x
+        ; add colour
+        lda # .VIC_CYAN
+        sta .vic_color+( 6 * 40), x
+        sta .vic_color+(23 * 40), x
+        dex
+        bpl -
+
+        ; draw the box for how BSOD64 was invoked:
+        ; prepare the screen position / colour
+        jsr .bsod_print_str_inline_pos
+            !byte   0, 14
+            !pet    .PET_LTRED, .PET_RVSON
+            !pet    .STR_END
+        
+        ; JSR overrides all other possibilities because the use of PHP
+        ; to capture the processor flags, when invoking by JSR, causes
+        ; the BRK bit to always be set
+        bit .bsod_is_jsr
+        bpl +
+        ; JSR:
+        jsr .bsod_print_str_inline
+            !pet    "JSR", .STR_END
+        bcc @data               ; (always branches)
+
+        ; check the break-bit
++       bit .bsod_is_brk
+        bpl +
+        ; BRK:
+        jsr .bsod_print_str_inline
+            !pet    "BRK", .STR_END
+        bcc @data               ; (always branches)
+        
++       ;IRQ:
+        jsr .bsod_print_str_inline
+            !pet    "IRQ", .STR_END
+
+        ; set the colour ready for filling in the data
+@data:  jsr .bsod_print_str_inline
+            !pet    .PET_RVSOFF
+            !pet    .PET_LTBLUE, .STR_END
+
+        ; redraw the various windows' data
+        jsr .bsod_redraw_registers
+        jsr .bsod_redraw_flags
+        jsr .bsod_redraw_banks
+        jsr .bsod_redraw_stack
+        jsr .bsod_redraw_memory
+
+        ; fallthrough
+        ; ...
+
+.bsod_input:
+;===============================================================================
+        ; scan the keyboard, placing any active key into the buffer
+        jsr .kernal_scnkey_addr
+        ; read a key from the keyboard buffer
+        jsr .kernal_getin_addr
+
+@down   cmp # .PET_CRSR_DN
+        bne @up
+
+        clc
+        lda .bsod_memview_lo
+        adc # 8
+        sta .bsod_memview_lo
+        bcc +
+        inc .bsod_memview_hi
++       jsr .bsod_redraw_memory
+        jmp .bsod_input
+
+@up     cmp # .PET_CRSR_UP
+        bne .bsod_input
+
+        sec
+        lda .bsod_memview_lo
+        sbc # 8
+        sta .bsod_memview_lo
+        bcs +
+        dec .bsod_memview_hi
++       jsr .bsod_redraw_memory
+        jmp .bsod_input
+
+        jmp *
+
+
+.bsod_redraw_registers:
+;===============================================================================
+; redraw the register window
+;
+;-------------------------------------------------------------------------------
+        ldx # 3                 ; screen row
+        ldy # 23                ; screen column
+        lda .frzn_a             ; "current" A-register value
+        jsr .bsod_print_hex8_pos
+        lda # ' '
+        tay
+        jsr .kernal_chrout_scr
+        lda .frzn_x             ; "current" X-register value
+        jsr .bsod_print_hex8
+        tya
+        jsr .kernal_chrout_scr
+        lda .frzn_y             ; "current" Y-register value
+        jsr .bsod_print_hex8
+
+        ; program counter value:
+        ldy # 18                ; column; row should already be 3
+        jsr .bsod_set_cursor
+
+        lda .frzn_pc_hi         ; "current" program counter value
+        ldx .frzn_pc_lo
+        jsr .bsod_print_hex16
+
+        rts
+
+
+.bsod_redraw_flags:
+;===============================================================================
+; redraw the flags window:
+;
+;-------------------------------------------------------------------------------
+        ; print the processor flags
+        ;
+        ldy # 32
+        ldx # 3
+        jsr .bsod_set_cursor
+
+        lda .frzn_f
+        sec
+        jsr .bsod_print_bin8
+
+        rts
+
+
+.bsod_redraw_banks:
+;===============================================================================
+; redraw the banks (I/O, ROMs) window:
+;
+; TODO: detect cart ROM
+;-------------------------------------------------------------------------------
+        ; draw the memory layout:
+        ;
+        lda # ' '               ; set default (no banked-in ROM) character
+        sta @b+0                ; BASIC ROM, LO
+        sta @b+1                ; BASIC ROM, HI
+        sta @i+0                ; I/O
+        sta @k+0                ; KERNAL ROM, LO
+        sta @k+1                ; KERNAL ROM, HI
+        
+        ; read the processor port state from the original zero-page
+        ; (note that this is under the I/O range, so we use our routine
+        ;  that will read the frozen equivalent of a real address)
+        ;
+        lda #< .zp+1
+        ldx #> .zp+1
+        jsr .bsod_get_frzn      ; read "$0001" from the frozen state ($D001)
+        and # %00000011         ; we only care about the bottom bits
+        beq +                   ; %00 = all RAM, nothing else
+
+        ; any non-zero value implies
+        ; that the I/O shield is on
+        ;
+        ldy # 'I'               ; use an "i" in bank $D to indicate I/O on
+        sty @i
+
+        sec
+        sbc # 1
+        beq +
+
+        ldy # 'K'               ; use a "k" in banks $E & $F for KERNAL on
+        sty @k+0
+        sty @k+1
+
+        sbc # 1
+        beq +
+
+        ldy # 'B'               ; use a "b" in banks $A & $B for BASIC on
+        sty @b+0
+        sty @b+1
+
+        ;-----------------------------------------------------------------------
++       jsr .bsod_print_str_inline_pos
+            !byte   3, 9
+            !pet    .PET_RVSON
+            !pet    "  "        ; cart ROM LO ($8000-$9FFF)
+@b          !pet    "  "        ; BASIC ROM ($A000-$BFFF)
+            !pet    " "         ; $C000 is always RAM
+@i          !pet    " "         ; I/O ($D000-$DFFF)
+@k          !pet    "  "        ; KERNAL ROM ($E000-$FFFF)
+            !pet    .PET_RVSOFF
+            !pet    .STR_END
+        
+        rts
+
+
+.bsod_redraw_stack:
+;===============================================================================
+; redraw the stack window:
+;
+;-------------------------------------------------------------------------------
+        ; set cursor to first line
+        lda # 7
+        sta @line
+        ; get the frozen stack pointer
+        ldy .frzn_sp
+
+-       jsr .bsod_print_str_inline_pos
+@line       !byte   7, 32
+            !pet    .PET_PURPLE, .STR_END
+        
+        ; is this line the top of the stack at freeze-time?
+        cpy .frzn_sp
+        bne +
+        lda # "@"
+       +bit_skip2
+
++       lda # " "
+        jsr .kernal_chrout_scr
+        jsr .bsod_print_str_inline
+            !pet    .PET_GREEN, "1", .STR_END
+        tya
+        jsr .bsod_print_hex8
+
+        jsr .bsod_print_str_inline
+            !pet    .PET_LTBLUE, " ", .STR_END
+
+        sei                     ; disable interrupts
+        dec .zp+1               ; turn off BASIC,
+        dec .zp+1               ; then KERNAL
+        dec .zp+1               ; and then I/O
+        lda .frzn_stack+1, y
+        inc .zp+1               ; turn on I/O
+        inc .zp+1               ; then KERNAL,
+        inc .zp+1               ; and then BASIC
+        cli                     ; enable interrupts
+        jsr .bsod_print_hex8    ; print the value
+        iny
+        beq +
+
+        ldx @line
+        inx
+        stx @line
+        cpx # 23
+        bcc -
+
++       ; TODO: handle hitting the bottom of the stack ($1FF);
+        ;       unused lines will have to be cleared if the stack is shallow
+        rts
+
+
+.bsod_redraw_memory:
+;===============================================================================
+; redraw the memory window:
+;
+;-------------------------------------------------------------------------------
+        ; set the address to begin printing lines at:
+        lda .bsod_memview_lo
+        ldx .bsod_memview_hi
+        sta .zp_addr_lo
+        stx .zp_addr_hi
+
+        ; set cursor to first line:
+        ldy # 0                 ; screen column
+        ldx # 7                 ; screen row
+        jsr .bsod_set_cursor
+
+        ; print the hex-dump:
+        ldy # 16                ; number of lines to print
+-       jsr .bsod_print_hexline ; print 8-bytes...
+
+        lda # 8                 ; add 8 to the virtual address
+        adc .zp_addr_lo
+        bcc +
+        inc .zp_addr_hi
++       sta .zp_addr_lo
+
+        dey
+        bne -
+
+        rts
+
+
+.bsod_print_str_inline:
+;===============================================================================
+; print a null-terminated PETSCII string, at the current cursor location,
+; where the string data immediately follows the call to this routine!
+;
+; out:  X, Y    (preserved)
+;
+;-------------------------------------------------------------------------------
+        ; set carry to indicate 'no embedded position'
+        sec
+        ; skip the next instruction (`clc`)
+        ; when we fall into the routine below
+       +bit_skip1
+        
+
+.bsod_print_str_inline_pos:
+;===============================================================================
+; print a null-terminated PETSCII string that includes the row+col position
+; in the first two bytes, where the string data immediately follows the call
+; to this routine!
+;
+; out:  X, Y    (preserved)
+;
+;-------------------------------------------------------------------------------
+        ; clear carry to indicate that the cursor position
+        ; is embdedded in the string
+        clc
+
+        ; preserve X & Y
+        stx @x+1
+        sty @y+1
+
+        ; get the address + row/col of the string from the stack
+        jsr .bsod_stack_string
+
+@print  lda (.zp_str), y
+!addr   .bsod_print_str_inline_pos__print = @print
+        tax
+        beq +                   ; .STR_END -- stop printing
+        dex
+        beq @next_pos           ; .STR_POS -- move cursor and continue printing
+        dex
+        beq @next_key           ; .STR_KEY -- print another key-command
+        dex
+        beq @next_keypos        ; .STR_KEYPOS -- move & print key-command
+
+        jsr .kernal_chrout_scr
+        iny
+        bne @print
+
+        ; we will need to add the length of the inline string to the call
+        ; address so as to 'step-over' those bytes and return execution to
+        ; the point after the inline-string
+        ;
++       tsx                     ; retrieve current stack position
+        iny
+        tya
+        adc .stack+1, x
+        sta .stack+1, x
+        bcc @x
+        inc .stack+2, x
+
+@x      ldx # .NULL_VALUE
+!addr   .bsod_print_str_inline_pos__x = @x+1
+@y      ldy # .NULL_VALUE
+!addr   .bsod_print_str_inline_pos__y = @y+1
+
+        rts
+
+@next_pos:
+        ; read & set the cursor position
+        ; from the next two bytes
+        iny
+        jsr .bsod_stack_string_pos
+        ; continue printing
+        jmp @print
+
+@next_key:
+        ; print another key-command
+        iny
+        jmp .bsod_print_key_inline_print
+
+@next_keypos:
+        ; set cursor and print another key-command
+        iny
+        jsr .bsod_stack_string_pos
+        jmp .bsod_print_key_inline_print
+
+
+.bsod_print_key_inline_pos:
+;===============================================================================
+; print a key guide, e.g. "R:REGISTERS":
+;
+; having a routine for this does away with the need to store
+; the same colour-changing bytes for every key string
+;
+;-------------------------------------------------------------------------------
+        ; clear carry to indicate an embedded
+        ; position in the string
+        clc
+        ; skip the next instruction (`clc`)
+        ; when we fall into the routine below
+       +bit_skip1
+
+.bsod_print_key_inline:
+        ;-----------------------------------------------------------------------
+        ; set carry to indicate 'no embedded position'
+        sec
+
+        ; preserve registers at the end of the inline string
+        ; printing routine, which is where we will exit
+        stx .bsod_print_str_inline_pos__x
+        sty .bsod_print_str_inline_pos__y
+
+        ; get the address of the string from the stack.
+        ; if carry is clear, the row/col will be read
+        ; from the first two bytes of the string
+        jsr .bsod_stack_string
+        
+.bsod_print_key_inline_print:
+        ;-----------------------------------------------------------------------
+        ; print the key
+        lda # .PET_WHITE
+        jsr .kernal_chrout_scr
+        lda (.zp_str), y
+        ; handle some special codes that require more than one character:
+        cmp # .PET_F1           ; is the key F1 or above?
+        bcc +
+        cmp # .PET_F8+1         ; is it F1 through F8?
+        bcs +
+        tax                     ; keep that Fx keycode...
+
+        ; print the F for Function, first
+        lda # "f"
+        jsr .kernal_chrout_scr
+        ; turn an F1-F8 PETSCII code ($85-$8C)
+        ; into a PETSCII number ($31-$38)
+        txa                     ; retrieve the Fx keycode
+        sbc # $53               ; move into "1"-"8" range
+
+        ; print the key letter
++       jsr .kernal_chrout_scr
+        ; print the colon separating key and function
+        ; (note: cannot nest `.bsod_print_str_inline` calls!)
+        lda # .PET_LTBLUE
+        jsr .kernal_chrout_scr
+        lda # ":"
+        jsr .kernal_chrout_scr
+        ; print the remainder of the string in yellow
+        lda # .PET_YELLOW
+        jsr .kernal_chrout_scr
+
+        iny
+        jmp .bsod_print_str_inline_pos__print
+
+
+.bsod_stack_string:
+;===============================================================================
+; read an inline string address from the stack:
+;
+;-------------------------------------------------------------------------------
+        ; put aside the carry flag for later;
+        ; this will cause the stack to look like this:
+        ;       
+        ; stack pointer ->  (unused stack value)
+        ;               +1  processor status
+        ;               +2  this routine's address, lo-byte
+        ;               +3  this routine's address, hi-byte
+        ;               +4  original call address for string, lo-byte
+        ;               +5  original call address for string, hi-byte
+        php
+
+        tsx                     ; get current stack pointer
+        clc                     ; we need to read the string address:
+        lda .stack+4, x         ; read the lo-byte from the stack
+        adc # 1                 ; add 1 to move into the inline string
+        sta .zp_str_lo
+        lda .stack+5, x
+        adc # 0
+        sta .zp_str_hi
+
+        ldy # 0                 ; start with string-index of 0
+        plp                     ; retrieve the original carry flag
+
+        bcc .bsod_stack_string_pos
+        rts
+
+.bsod_stack_string_pos:
+        ;-----------------------------------------------------------------------
+        ; read the row & col bytes
+        ;
+        lda (.zp_str), y        ; read the row
+        tax                     ; must be in X for KERNAL call
+        iny
+        tya
+        pha
+        lda (.zp_str), y        ; read the col
+        tay                     ; must be in Y for KERNAL call
+
+        jsr .bsod_set_cursor    ; position the cursor
+
+        pla
+        tay
+        iny                     ; new string index
+
+        rts
+
+
+.bsod_print_hexline:
+;===============================================================================
+; print a row of memory values:
+;
+;-------------------------------------------------------------------------------
+        sty @yy+1               ; preserve Y-register
+
+        ; check if this line contains the (working) program counter:
+        ;-----------------------------------------------------------------------
+        lda # " "
+        sta @pcrow+2
+
+        lda .frzn_pc_hi         ; compare the hi-bytes first
+        cmp .zp_addr_hi
+        bne +
+        
+        lda .frzn_pc_lo         ; get working program counter, lo-byte
+        and # %11111000         ; modulo 8, since each hexrow is 8-bytes
+        cmp .zp_addr_lo         ; compare with this row
+        bne +
+
+        ; program counter is on this row:
+        ;
+        lda # "@"
+        sta @pcrow+2
+
+        ; subtract the lo-bytes to work out which of the 8-bytes
+        ; in a row the program counter will be on
+        lda .frzn_pc_lo
+        sec
+        sbc .zp_addr_lo
+        +bit_skip2
+
++       lda # $ff
+        sta @pccol+1
+
+        ; print the hexline:
+        ;-----------------------------------------------------------------------
+        ; print the gutter. an "@" will be placed there (by the above code)
+        ; for the line that contains the working program counter. (note that
+        ; the user can modify the program counter restored upon defrosting)
+        ;
+        jsr .bsod_print_str_inline
+@pcrow      !pet    .PET_PURPLE, "  "
+            !pet    .PET_GREEN, "$"
+            !byte   .STR_END
+
+        ; print the memory address:
+        lda .zp_addr_hi
+        ldx .zp_addr_lo
+        jsr .bsod_print_hex16
+
+        lda # .PET_LTBLUE
+        jsr .kernal_chrout_scr
+
+        ; read 8-bytes from the frozen state:
+        ;-----------------------------------------------------------------------
+        ; retrieve the real address from the virtual address
+        ;
+        lda .zp_addr_lo
+        ldx .zp_addr_hi
+        jsr .bsod_get_frzn_addr
+        sta .zp_real_lo
+        stx .zp_real_hi
+
+        sei                     ; disable interrupts
+        lda # .MEM_ALL_RAM      ; turn off BASIC,
+        sta .zp+1               ; KERNAL, and I/O
+
+        ; read and push bytes to the stack
+        ldy # 7
+-       lda (.zp_real), y
+        pha
+        dey
+        bpl -
+
+        lda # .MEM_DEFAULT      ; turn on KERNAL,
+        sta .zp+1               ; BASIC, and I/O
+        cli                     ; enable interrupts
+
+        ; print hex-dump: (8 bytes)
+        ;-----------------------------------------------------------------------
+        ldy # 8                 ; print 8-bytes
+        ldx # 0
+-       ; is this byte the program-counter?
+        ; the comparison value needed is written in here earlier
+@pccol  cpx # .NULL_VALUE
+        beq @here
+        lda # " "               ; print space between bytes
+        jsr .kernal_chrout_scr
+
+        pla                     ; pull one byte from the stack
+        jsr .bsod_print_hex8    ; print as two-digit hexadecimal
+        inx
+        dey                     ; one less byte...
+        bne -                   ; keep going?
+
+        ; clean-up and exit:
+        ;-----------------------------------------------------------------------
+@yy     ldy # .NULL_VALUE       ; restore the Y-register
+        lda # .PET_RETURN       ; move to the next line
+        jmp .kernal_chrout_scr  ; (Y is preserved)
+
+        ;-----------------------------------------------------------------------
+        ; print the "@" for the program-counter
+@here:  jsr .bsod_print_str_inline
+                !pet    .PET_PURPLE, "@"
+                !pet    .PET_LTBLUE
+                !byte   .STR_END
+
+        pla                     ; pull one byte from the stack
+        jsr .bsod_print_hex8    ; print as two-digit hexadecimal
+        inx
+        dey                     ; one less byte...
+        bne -                   ; keep going?
+
+
+.bsod_get_frzn:
+;===============================================================================
+; read the value of an address from the frozen state:
+; i.e. redirect addresses $0000-$07FF to $D000-$D7FF
+;
+; NOTE: I/O *MUST* be switched off to get the correct value
+;
+; in:   A       original address lo-byte
+;       X       original address hi-byte
+;
+; out:  A       value of address from frozen state
+;       Y       (preserved)
+;-------------------------------------------------------------------------------
+        ; if the address is within low-RAM then redirect
+        ; the address to the frozen copy in high-RAM
+        jsr .bsod_get_frzn_addr
+
+        stx @addr+2             ; set address hi-byte to read
+        sta @addr+1             ; set address lo-byte to read
+
+        sei                     ; disable interrupts
+
+        ldx # .MEM_ALL_RAM      ; turn off BASIC,
+        stx .zp+1               ; KERNAL, and I/O
+
+@addr   lda .null_addr          ; read the RAM address
+
+        ldx # .MEM_DEFAULT      ; turn on KERNAL,
+        stx .zp+1               ; BASIC, and I/O
+
+        cli                     ; enable interrupts
+        rts
+
+
+.bsod_get_frzn_addr:
+;===============================================================================
+; return the real address for a "virtual" address:
+;
+; in:   A       virtual address lo-byte
+;       X       virtual address hi-byte
+;
+; out:  A       real address, lo-byte
+;       X       real address, hi-byte
+;       carry   0 = address was redirected
+;               1 = address was not redirected
+;       Y       (preserved)
+;-------------------------------------------------------------------------------
+        ; put aside the lo-byte as we check the hi-byte first
+        pha
+        
+        ; the lower eight pages of the machine
+        ; were backed up and are now stored elsewhere
+        txa
+        cmp #> .screen + $800
+        bcs +                   ; if address > $07FF then return actual RAM
+
+        ; if the address is within low-RAM then redirect
+        ; the address to the frozen copy in high-RAM
+        clc
+        adc #> .frzn
+        tax
+
++       pla
+        rts
+
+
+;===============================================================================
+; address that appears at the top of the memory viewer window
+; i.e. the current memory range (128-bytes) within the window;
+; not to be confused with the cursor address which can be
+; any specific byte within the window
+;
+.bsod_memview:
+.bsod_memview_lo:
+        !byte   .NULL_VALUE
+.bsod_memview_hi:
+        !byte   .NULL_VALUE
+
+; currently focused address in memory, i.e. the cursor
+.bsod_memaddr:
+.bsod_memaddr_lo:
+        !byte   .NULL_VALUE
+.bsod_memaddr_hi:
+        !byte   .NULL_VALUE
+
+; working copies of the frozen registers:
+;
+.work_cpu_ddir:                 ; backup of the CPU data-direction port ($00)
+        !byte   .NULL_VALUE
+.work_cpu_port:                 ; backup of the CPU port ($01)
+        !byte   .NULL_VALUE
+.work_a:                        ; backup of the A register
+        !byte   .NULL_VALUE
+.work_x:                        ; backup of the X register
+        !byte   .NULL_VALUE
+.work_y:                        ; backup of the Y register
+        !byte   .NULL_VALUE
+.work_sp:                       ; backup of the stack pointer
+        !byte   .NULL_VALUE
+.work_pc:                       ; backup of the program counter
+.work_pc_lo:
+        !byte   .NULL_VALUE
+.work_pc_hi:
+        !byte   .NULL_VALUE
+.work_f:                        ; backup of the processor status (flags)
+        !byte   .NULL_VALUE
+
+.work_nmi:                      ; backup of the NMI hardware vector ($FFFA/B)
+.work_nmi_lo:
+        !byte   .NULL_VALUE
+.work_nmi_hi:
+        !byte   .NULL_VALUE
+
+.work_rst:                      ; backup of the RESET hardware vector ($FFFC/D)
+.work_rst_lo:
+        !byte   .NULL_VALUE
+.work_rst_hi:
+        !byte   .NULL_VALUE
+
+.work_irq:                      ; backup of the IRQ hardware vector ($FFFE/F)
+.work_irq_lo:
+        !byte   .NULL_VALUE
+.work_irq_hi:
+        !byte   .NULL_VALUE
