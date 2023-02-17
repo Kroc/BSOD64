@@ -2,6 +2,116 @@
 ; licenced under BSD 2-clause
 ;===============================================================================
 
+;;        ; print the "BSOD"
+;;        ;
+;;        jsr .bsod_print_str_inline
+;;            !pet    .PET_WHITE      ; set text-colour
+;;            !pet    .PET_CLR        ; clear the screen
+;;            !pet    .PET_UCASE      ; switch to upper-case
+;;            !pet    .PET_CASEOFF    ; disable case-switching via SHIFT+C=
+;;            ; print the sad face:
+;;            !pet    $20, $20, $6e, .PET_RETURN
+;;            !pet    $71, $20, $a5, .PET_RETURN
+;;            !pet    $20, $20, $a5, .PET_RETURN
+;;            !pet    $71, $20, $a5, .PET_RETURN
+;;            !pet    $20, $20, $6d, .PET_RETURN
+;;            !pet    .PET_RETURN, .PET_RETURN
+;;            !pet    "break at $"
+;;            !pet    .STR_END
+;;        
+;;        lda .frzn_pc_hi
+;;        ldx .frzn_pc_lo
+;;        jsr .bsod_print_hex16
+;;
+;;        jsr .bsod_print_str_inline
+;;            !pet    .PET_RETURN
+;;            !pet    .PET_RETURN, .PET_RETURN
+;;            !byte   .STR_END
+;;
+;;        ; print error message?
+;;        ;---------------------------------------------------------------------
+;;        ; check for an error message following the BRK:
+;;        ;
+;;        ; to idenitfy the bytes following the BRK as an error message, and not
+;;        ; code, we check for a signature byte that could *not* be code, i.e.
+;;        ; an illegal instruction
+;;        ;
+;;        ; when we read back the bytes following the frozen program counter,
+;;        ; they could be underneath the BASIC or KERNAL ROM!
+;;        ;
+;;        sei                     ; disable interrupts
+;;        lda # .MEM_ALL_RAM      ; turn off BASIC,
+;;        sta .zp+1               ; KERNAL & I/O
+;;
+;;        ; copy the frozen program counter
+;;        ; into the zero-page for indexing
+;;        lda .frzn_pc_lo
+;;        sta .zp_str_lo
+;;        lda .frzn_pc_hi
+;;        sta .zp_str_hi
+;;
+;;        ; read the first byte following the BRK
+;;        ldy # 0
+;;        lda (.zp_str), y
+;;        iny
+;;
+;;        ; we use $42 as our marker specifically because, whilst it causes a
+;;        ; crash on a 6502 (and therefore can't be mistaken for code following
+;;        ; the BRK), it is reserved on the 65C02 & 65816 as "WDM", an escape-
+;;        ; code for future expansions and shouldn't occur in practice when it
+;;        ; comes to Commodore systems (e.g. Super-CPU)
+;;        ;
+;;        cmp # $42               ; is the byte following the BRK, $42?
+;;        bne @nomsg              ; if not, skip over printing error message
+;;
+;;-       lda (.zp_str), y        ; read a character from the string
+;;        beq +                   ; if $00, stop printing
+;;
+;;        ldx # .MEM_KERNAL_IO    ; turn on I/O,
+;;        stx .zp+1               ; KERNAL & BASIC
+;;
+;;        jsr .kernal_chrout_scr  ; print the character
+;;        
+;;        ldx # .MEM_ALL_RAM      ; turn off BASIC,
+;;        stx .zp+1               ; KERNAL & I/O
+;;        
+;;        iny                     ; move to next character
+;;        bne -                   ; (stops printing after 255 characters)
+;;
+;;+       ; print CPU status:
+;;        ;---------------------------------------------------------------------
+;;@nomsg: lda # .MEM_KERNAL_IO    ; turn on I/O,
+;;        sta .zp+1               ; BASIC & KERNAL
+;;        cli                     ; enable interrupts
+;;
+;;        jsr .bsod_print_str_inline_pos
+;;            !byte   20, 0
+;;            !pet    .PET_WHITE      ; (error message may have changed colour)
+;;            !pet    "a:$   x:$   y:$   sp:$"
+;;            !pet    .PET_RETURN, .PET_RETURN
+;;            !pet    "nv-bdizc", .PET_RETURN
+;;            !byte   .STR_END
+;;
+;;        ; print status flags
+;;        lda .frzn_f
+;;        sec
+;;        jsr .bsod_print_bin8
+;;
+;;        ; print register values
+;;        ldx # 20
+;;        ldy # 3
+;;        lda .frzn_a
+;;        jsr .bsod_print_hex8_pos
+;;        ldy # 9
+;;        lda .frzn_x
+;;        jsr .bsod_print_hex8_pos
+;;        ldy # 15
+;;        lda .frzn_y
+;;        jsr .bsod_print_hex8_pos
+;;        ldy # 22
+;;        lda .frzn_sp
+;;        jsr .bsod_print_hex8_pos
+
 .bsod_debug:
 ;===============================================================================
 ; launch the debugger UI
