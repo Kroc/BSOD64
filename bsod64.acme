@@ -68,6 +68,11 @@
 BSOD64_CODE_ADDR = $7c80        ;sys 31872
 BSOD64_DATA_ADDR = $7000
 
+; when BSOD64 is invoked, the areas of memory that BSOD64 needs to re-use are
+; copied to the RAM under the I/O space. since this RAM is very difficult to
+; use, it's the most likely "unused" RAM on the system and the last area
+; a developer will want to utilise before any other
+;
 ; base address where BSOD64 is assembled -- CANNOT be under a ROM shadow!
 !ifndef BSOD64_CODE_ADDR        BSOD64_CODE_ADDR = $c000        ; sys 49152
 ; where BSOD64 backs up data, can be under I/O but not KERNAL
@@ -82,11 +87,6 @@ BSOD64_DATA_ADDR = $7000
 !source "system.acme"
 
 ;===============================================================================
-; when BSOD64 is invoked, the areas of memory that BSOD64 needs to re-use are
-; copied to the RAM under the I/O space. since this RAM is very difficult to
-; use, it's the most likely "unused" RAM on the system and the last area
-; a developer will want to utilise before any other
-;
 !addr {
                         ; (base address of frozen data)
 .frzn                   = BSOD64_DATA_ADDR
@@ -246,22 +246,22 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; we do any math (this is a hardware-flaw with the NMOS 6502)
         cld
         tsx                     ; get the stack pointer
-        stx .frzn_sp            ; keep an unmodified copy
+        stx .frzn_sp            ; keep an original copy
         ; backup the registers that were pushed on to the stack by the
         ; IRQ/NMI routine (or BSOD64 iteself in the case of `bsod_jsr`)
         lda .stack+3, x         ; 1st register on stack
-        sta .frzn_y             ; keep an unmodified copy of Y
+        sta .frzn_y             ; keep an original copy of Y
         lda .stack+4, x         ; 2nd register on stack
-        sta .frzn_x             ; keep an unmodified copy of X
+        sta .frzn_x             ; keep an original copy of X
         lda .stack+5, x         ; 3rd register on stack
-        sta .frzn_a             ; keep an unmodified copy of A
+        sta .frzn_a             ; keep an original copy of A
 
-        ; below the registers should be the processor status
-        ; at the time of interrupt. we will need this to determine
-        ; if BSOD64 was invoked by a BRK instruction
+        ; below the registers should be the processor status at the time of
+        ; interrupt. we will need this to determine if BSOD64 was invoked by
+        ; a BRK instruction
         ;
-        lda .stack+6, x
-        sta .frzn_f             ; keep an unmodified copy
+        lda .stack+6, x         ; read processor flags from interrupt
+        sta .frzn_f             ; keep an original copy
 
         ; and lastly the program-counter. the address of the program counter
         ; varies depending on calling method (i.e. JSR/IRQ/BRK) and we will
@@ -352,11 +352,17 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; freeze VIC-II:
         ;-----------------------------------------------------------------------
-        ; if the frozen data is *not* stored under I/O then we can
-        ; turn on I/O for the whole copy rather than each byte
+        ; backup CIA #2 port A which holds the VIC bank
         ;
-!ifndef BSOD64_UNDER_IO {
-        inc .zp+1               ; enable the I/O shield for VIC-II registers
+        inc .zp+1               ; enable the I/O shield to access CIA #2
+        lda .cia2+.CIA_PORTA    ; read CIA #2 port A
+        sta .frzn_cia2          ; store locally, I/O doesn't need to be off
+
+        ; if the frozen data is *not* stored under I/O then we can
+        ; leave I/O on for the whole copy rather than each byte
+        ;
+!ifdef  BSOD64_UNDER_IO {
+        dec .zp+1               ; disable I/O
 }
         ; backup the VIC-II state before we start changing the screen
         ;
@@ -584,13 +590,28 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         
         ; print the frozen ROM/RAM bank state:
         ;-----------------------------------------------------------------------
-        lda # ' '               ; set default (no banked-in ROM) character
-        sta .bsod_str_banks_b+0 ; BASIC ROM, LO
-        sta .bsod_str_banks_b+1 ; BASIC ROM, HI
-        sta .bsod_str_banks_i+0 ; I/O
-        sta .bsod_str_banks_k+0 ; KERNAL ROM, LO
-        sta .bsod_str_banks_k+1 ; KERNAL ROM, HI
-        
+        ; VIC bank is done first as other banking goes over this
+        ;
+        ldx # 12                ; VIC bank 3 starts on the 12th page
+        lda .frzn_cia2          ; frozen state of CIA#2 port A
+        and # %00000011         ; we only care about the bottom two bits
+        beq +                   ; =%00? VIC bank 3 ($C000-$FFFF)
+        ldx # 8                 ; VIC bank 2 starts on the 8th page
+        cmp # %00000001         ; =%01?
+        beq +                   ; VIC bank 2 ($8000-$BFFF)
+        ldx # 4                 ; VIC bank 1 starts on the 4th page
+        cmp # %00000010         ; =%11?
+        beq +                   ; VIC bank 1 ($4000-$7FFF)
+
+        ; otherwise, VIC bank 0 ($0000-$3FFFF)
+        ldx # 0                 ; VIC bank 0 starts on the 0th page
++       lda # 'V'               ; use consumate "v"s for VIC bank
+        sta .bsod_str_banks+0, x
+        sta .bsod_str_banks+1, x
+        sta .bsod_str_banks+2, x
+        sta .bsod_str_banks+3, x
+
+        ; ROM banks:
         lda .frzn_cpu_port
         and # %00000011         ; we only care about the bottom bits
         beq +                   ; %00 = all RAM, nothing else
@@ -617,7 +638,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sty .bsod_str_banks_b+1
 
 +       ldx # 1
-        ldy # 32
+        ldy # 24
         jsr .bsod_set_cursor
         lda #< .bsod_str_banks
         ldx #> .bsod_str_banks
@@ -732,20 +753,26 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;-------------------------------------------------------------------------------
         !pet    .PET_WHITE, .PET_CLR, .PET_LCASE, .PET_CASEOFF
         !pet    .PET_RVSON
-        !pet    "PC:   A: X: Y: NV-BDIZC         89ABCDEF"
+        !pet    "PC:   A: X: Y: NV-BDIZC 0123456789ABCDEF"
         !pet    .PET_RVSOFF
         !pet    "$", .STR_END
 
 .bsod_str_banks:
 ;-------------------------------------------------------------------------------
-        !pet    ".."        ; cart ROM LO ($8000-$9FFF)
+.bsod_str_banks_vic0:           ; VIC-bank 0 ($0000-$3FFF)
+        !pet    "...."          ; zeropage, stack, work RAM
+.bsod_str_banks_vic1:           ; VIC-bank 1 ($4000-$7FFF)
+        !pet    "...."
+.bsod_str_banks_vic2:           ; VIC-bank 2 ($8000-$BFFF)
+        !pet    ".."            ; cart ROM LO ($8000-$9FFF)
 .bsod_str_banks_b:
-        !pet    ".."        ; BASIC ROM ($A000-$BFFF)
-        !pet    "."         ; $C000 is always RAM
+        !pet    ".."            ; BASIC ROM ($A000-$BFFF)
+.bsod_str_banks_vic3:           ; VIC-bank 3 ($C000-$FFFF)
+        !pet    "."             ; $C000 is always RAM
 .bsod_str_banks_i:
-        !pet    "."         ; I/O ($D000-$DFFF)
+        !pet    "."             ; I/O ($D000-$DFFF)
 .bsod_str_banks_k:
-        !pet    ".."        ; KERNAL ROM ($E000-$FFFF)
+        !pet    ".."            ; KERNAL ROM ($E000-$FFFF)
         !pet    .STR_END
 
 .bsod_str_zp:
@@ -755,7 +782,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    .STR_END
 
 
-.bsod_print
+.bsod_print:
 ;===============================================================================
 ; in:   A       address of PETSCII string, lo-byte
 ;       X       address of PETSCII string, hi-byte
@@ -851,7 +878,7 @@ bsod_irq_nokernal:
 ;
 bsod_nmi_nokernal:
         ;-----------------------------------------------------------------------
-        ; acknowledge the interrupt
+        ; acknowledge the interrupt (we must R/M/W the register)
         asl .cia2+.CIA_IRQ
 
 bsod_nmi_kernalon:
@@ -879,25 +906,24 @@ bsod_push:
 ;               PC hi-byte              (pushed by the JSR to BSOD64)
 ;
 ;-------------------------------------------------------------------------------
-        ; push the processor status to the stack
+        ; push the processor status to the stack:
         ;
         ; even though an interrupt could occur between this instruction
         ; and the next, we need to capture the current interrupt flag state
         ; before changing it
         ;
-        ; WARNING: the PHP instruction always sets the BRK bit! a flag is set
-        ; (below) to indicate that BSOD64 was invoked by JSR instead of BRK
-        ; to ensure that BSOD64 does not misinterpret the machine state --
-        ; BRK adds 2 to the program counter!
+        ; WARNING: the PHP instruction *always sets the BRK bit!*
+        ; a flag is set (below) to indicate that BSOD64 was invoked by JSR
+        ; instead of BRK to ensure that BSOD64 does not misinterpret the
+        ; machine state -- BRK adds 2 to the program counter!
         ;
-        php
-        ; disable interrupts
-        sei
+        php                     ; push processor flags
+        sei                     ; disable interrupts
         ; push the registers
+        pha                     ; A,
+        txa                     ; X,
         pha
-        txa
-        pha
-        tya
+        tya                     ; Y
         pha
         ; set flag to indicate BSOD64 being invoked by JSR
         ; -- we will have to resume execution differently
@@ -1047,8 +1073,9 @@ bsod_push:
 
 
 ;===============================================================================
-; these values have to be stored within the code space because they have
-; be backed up early, before the I/O shield is turned off
+; these values have to be stored within the code space because they have to be
+; backed up early, before the I/O shield is turned if the BSDO64 code can run
+; at all then, logically, these addresses are accessible
 ;
 .frzn_a:        ; backup of the A register
         !byte   .NULL_VALUE
@@ -1091,6 +1118,8 @@ bsod_push:
 .frzn_irq_hi:
         !byte   .NULL_VALUE
 
+.frzn_cia2:     ; CIA #2 port A (contains VIC bank)
+        !byte   .NULL_VALUE
 
 !if BSOD64_BSODONLY = 0 {
 !source "bsod64_debug.acme"
