@@ -1,4 +1,4 @@
-; BSOD64 (C) Kroc Camen, 2019-2020
+; BSOD64 (C) Kroc Camen, 2019-2023
 ; licenced under BSD 2-clause
 ;===============================================================================
 ; BSOD64 is a "blue screen of death" for C64 programs. why would you want that?
@@ -147,9 +147,7 @@ BSOD64_DATA_ADDR = $7000
 ; terminators used for the string-printing routines:
 ;
 .STR_END                = $00   ; standard terminator
-.STR_POS                = $01   ; a string with screen co-ords follows
-.STR_KEY                = $02   ; a key-identifier string follows
-.STR_KEYPOS             = $03   ; as above, but also with screen co-ords
+.STR_POS                = $01   ; change cursor pos; row & col bytes follow
 
 ; constants for memory-layout:
 ;
@@ -431,7 +429,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
         ; this KERNAL routine erases the zero page, pages 2 & 3, and runs
         ; a memory test before configuring BASIC limits. it sets the page
-        ; number for screen memory to $04 just before it exits
+        ; number for screen memory to $04 just before it exits, but does
+        ; not change the actual VIC bank
         ;
         jsr .kernal_ramtas_addr
 
@@ -606,10 +605,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; otherwise, VIC bank 0 ($0000-$3FFFF)
         ldx # 0                 ; VIC bank 0 starts on the 0th page
 +       lda # 'V'               ; use consumate "v"s for VIC bank
-        sta .bsod_str_banks+0, x
-        sta .bsod_str_banks+1, x
-        sta .bsod_str_banks+2, x
-        sta .bsod_str_banks+3, x
+        sta .bsod_str_banks_vic+0, x
+        sta .bsod_str_banks_vic+1, x
+        sta .bsod_str_banks_vic+2, x
+        sta .bsod_str_banks_vic+3, x
 
         ; ROM banks:
         lda .frzn_cpu_port
@@ -637,9 +636,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sty .bsod_str_banks_b+0
         sty .bsod_str_banks_b+1
 
-+       ldx # 1
-        ldy # 24
-        jsr .bsod_set_cursor
+        ; print the bank breakdown:
         lda #< .bsod_str_banks
         ldx #> .bsod_str_banks
         jsr .bsod_print
@@ -647,9 +644,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; print frozen zero-page & stack:
         ;-----------------------------------------------------------------------
         ; print the header line
-        ldx # 5
-        ldy # 0
-        jsr .bsod_set_cursor
         lda #< .bsod_str_zp
         ldx #> .bsod_str_zp
         jsr .bsod_print
@@ -759,6 +753,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 .bsod_str_banks:
 ;-------------------------------------------------------------------------------
+        !byte   .STR_POS, 1, 24
+.bsod_str_banks_vic:
 .bsod_str_banks_vic0:           ; VIC-bank 0 ($0000-$3FFF)
         !pet    "...."          ; zeropage, stack, work RAM
 .bsod_str_banks_vic1:           ; VIC-bank 1 ($4000-$7FFF)
@@ -777,10 +773,12 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 .bsod_str_zp:
 ;-------------------------------------------------------------------------------
+        !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
         !pet    "zeropage:                      stack:$"
         !pet    .STR_END
 
+-       rts
 
 .bsod_print:
 ;===============================================================================
@@ -789,15 +787,41 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;-------------------------------------------------------------------------------
         sta .zp_str_lo          ; store the PETSCII string
         stx .zp_str_hi          ;  address in zero-page for indexing
-        ldy # 0                 ; string index
+        ldy # -1                ; string index (start at -1 for pre-increment)
 
--       lda (.zp_str), y
-        beq +                   ; .STR_END -- stop printing
-        jsr .kernal_chrout_scr
-        iny
-        bne -
+@loop:  iny                     ; move to next character
+        lda (.zp_str), y        ; read character from string
+        beq -                   ; = .STR_END? -- stop printing
+        cmp # $20               ; values $00-$1F are control codes
+        bcc +
+        
+        ; not a control code:
+        jsr .kernal_chrout_scr  ; print the character
+        bne @loop               ; keep looping
 
-+       rts
+        ; our custom control codes:
+        ;
+        ; .STR_POS : set cursor location
+        ;-----------------------------------------------------------------------
++       cmp # .STR_POS          ; =.STR_POS? -- set cursor position
+        bne +
+
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read cursor row
+        tax                     ; use X for KERNAL call
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read cursor column
+        sty @y+1                ; (backup Y before KERNAL call)
+        tay                     ; move cursor col to Y-register
+        clc                     ; = set cursor
+        jsr .kernal_plot_addr   ; call KERNAL to position cursor
+@y      ldy # .NULL_VALUE       ; restore string index
+        bne @loop
+
++       jsr .kernal_chrout_scr  ; handle the PETSCII control code
+        bne @loop               ; keep looping
+
+        rts
 
 
 .bsod_hook:
@@ -950,16 +974,16 @@ bsod_push:
         !byte   .NULL_VALUE
 
 
-.bsod_set_cursor:
-;===============================================================================
-; set the cursor positon:
-; (saves a byte every time we have to do this)
-;
-; in:   X       screen row
-;       Y       screen column
-;-------------------------------------------------------------------------------
-        clc                     ; = set cursor
-        jmp .kernal_plot_addr   ; call KERNAL to position cursor
+;;.bsod_set_cursor:
+;;;=============================================================================
+;;; set the cursor positon:
+;;; (saves a byte every time we have to do this)
+;;;
+;;; in:   X       screen row
+;;;       Y       screen column
+;;;-----------------------------------------------------------------------------
+;;        clc                     ; = set cursor
+;;        jmp .kernal_plot_addr   ; call KERNAL to position cursor
 
 
 .bsod_print_hex16:
@@ -972,24 +996,24 @@ bsod_push:
 ;-------------------------------------------------------------------------------
         jsr .bsod_print_hex8    ; print hi-byte first, X will be preserved
         txa                     ; switch to value's lo-byte
-        jmp .bsod_print_hex8
+        ;;jmp .bsod_print_hex8
 
 
-.bsod_print_hex8_pos:
-;===============================================================================
-; print a byte as PETSCII hexadecimal at a given screen row/column:
-;
-; in:   A       byte value
-;       X       screen row
-;       Y       screen col
-;
-;-------------------------------------------------------------------------------
-        pha                     ; put aside original value
-        jsr .bsod_set_cursor    ; position the cursor
-        pla                     ; retrieve original value
-
-        ; fallthrough
-        ; ...
+;;.bsod_print_hex8_pos:
+;;;=============================================================================
+;;; print a byte as PETSCII hexadecimal at a given screen row/column:
+;;;
+;;; in:   A       byte value
+;;;       X       screen row
+;;;       Y       screen col
+;;;
+;;;-----------------------------------------------------------------------------
+;;        pha                     ; put aside original value
+;;        jsr .bsod_set_cursor    ; position the cursor
+;;        pla                     ; retrieve original value
+;;
+;;        ; fallthrough
+;;        ; ...
 
 .bsod_print_hex8:
 ;===============================================================================

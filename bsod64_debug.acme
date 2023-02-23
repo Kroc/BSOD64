@@ -2,6 +2,9 @@
 ; licenced under BSD 2-clause
 ;===============================================================================
 
+.STR_KEY                = $02   ; a key-identifier string follows
+.STR_KEYPOS             = $03   ; as above, but also with screen co-ords
+
 ;;        ; print the "BSOD"
 ;;        ;
 ;;        jsr .bsod_print_str_inline
