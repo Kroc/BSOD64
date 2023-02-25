@@ -1040,37 +1040,32 @@ bsod_push:
 ;      -c       use 0/1 digits
 ;      +c       use -/* digits
 ; out:  Y       (preserved)
+;       X       (clobbered)
 ;
-; TODO: use a sliding bit to count 8 times instead of Y-register
+; TODO: compact into one copy of the loop
 ;-------------------------------------------------------------------------------
         ; check the carry state. if carry is set binary
         ; digits will be printed as "-" = 0 and "*" = 1
         bcs @sym                ; carry set = use symbols
 
-@dig:   sty @y1+1               ; backup Y-register
-        ldy # 8                 ; print 8-bits
-
         ; print "0" & "1" digits
         ;-----------------------------------------------------------------------
--       asl                     ; pop a bit off the value
+@dig:   asl                     ; pop a bit off the value
         tax                     ; remember remainder for next loop
         lda # $30               ; PETSCII '0'
         adc # 0                 ; PETSCII '1' if bit was 1
         jsr .kernal_chrout_scr  ; print digit
 
         txa                     ; retrieve remaining value before looping
-        dey                     ; 1 digit down
-        bne -                   ; any more left?
-
-@y1     ldy # .NULL_VALUE
+        asl @count              ; shift counter along
+        bne @dig                ; keep looping until the bit falls off
+        
+        rol @count              ; (put the bit back on the end)
         rts
 
         ; print "-" & "*" digits
         ;-----------------------------------------------------------------------
-@sym:   sty @y2+1               ; backup Y-register
-        ldy # 8                 ; print 8-bits
-
--       asl                     ; pop a bit off the value
+@sym:   asl                     ; pop a bit off the value
         tax                     ; remember remainder for next loop
 
         bcc +                   ; is bit 0 or 1?
@@ -1080,12 +1075,13 @@ bsod_push:
         jsr .kernal_chrout_scr
         
         txa                     ; retrieve remaining value before looping
-        dey                     ; 1 digit down
-        bne -                   ; any more left?
-
-@y2     ldy # .NULL_VALUE
+        asl @count              ; shift counter along
+        bne @sym                ; keep looping until the bit falls off
+        
+        rol @count              ; (put the bit back on the end)
         rts
 
+@count  !byte   $00000001
 
 ;===============================================================================
 ; these values have to be stored within the code space because they have to be
