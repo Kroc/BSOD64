@@ -264,14 +264,18 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda .stack+6, x         ; read processor flags from interrupt
         sta .frzn_f             ; keep an original copy
 
-        ; and lastly the program-counter. the address of the program counter
-        ; varies depending on calling method (i.e. JSR/IRQ/BRK) and we will
-        ; rectify that after the freeze is complete
+        ; and lastly the program-counter. the 6502 processor always auto-
+        ; increments the program counter when executing an RTS or RTI
+        ; instruction, so the address pushed on the stack is always one
+        ; less than the next instruction in the code
         ;
+        clc
         lda .stack+7, x         ; program counter lo-byte
-        sta .frzn_pc_lo         ; keep an unmodified copy
+        adc # 1                 ; add one to correct shown PC
+        sta .frzn_pc_lo         ; store as frozen PC, lo-byte
         lda .stack+8, x         ; program counter hi-byte
-        sta .frzn_pc_hi         ; keep an unmodified copy
+        adc # 0                 ; if the +1 overflowed, increment hi-byte
+        sta .frzn_pc_hi         ; store as frozen PC, hi-byte
 
         ; freeze low-memory:
         ;-----------------------------------------------------------------------
