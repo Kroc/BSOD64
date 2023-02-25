@@ -623,7 +623,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda # .PET_WHITE
         +bit_skip2
 +       lda # .PET_LTBLUE
-        jsr .kernal_chrout_scr
+        jsr .kernal_chrout
 
 !ifdef  BSOD64_UNDER_IO {
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
@@ -663,11 +663,11 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; start the next line of the frozen zero-page dump
         ;
         lda # "$"
-        jsr .kernal_chrout_scr
+        jsr .kernal_chrout
         txa
         jsr .bsod_print_hex8
         lda # ":"
-        jmp .kernal_chrout_scr
+        jmp .kernal_chrout
 
 .bsod_bsod_stack:
         ;-----------------------------------------------------------------------
@@ -677,9 +677,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         beq +
 
         lda # " "
-        jsr .kernal_chrout_scr
+        jsr .kernal_chrout
         lda # " "
-        jsr .kernal_chrout_scr
+        jsr .kernal_chrout
 !ifdef  BSOD64_UNDER_IO {
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
@@ -695,7 +695,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 +       dey
         lda # .PET_RETURN
-        jmp .kernal_chrout_scr
+        jmp .kernal_chrout
 
 
 .bsod_str_top:
@@ -757,8 +757,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    .STR_HEXB
 .frzn_sp:
         !byte   $00
-        !pet    .PET_RVSOFF
-        !pet    .PET_RETURN, .PET_RETURN
+        !pet    .PET_RVSOFF, .PET_RETURN
         !pet    .STR_END
 
 --      rts
@@ -783,7 +782,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bcc -                   ; handle custom control code?
 
         ; not a control code:
-        jsr .kernal_chrout_scr  ; print the character
+        jsr .kernal_chrout      ; print the character
         bne @loop               ; keep looping
 
         ; our custom control codes:
@@ -837,7 +836,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jmp .bsod_print_bin8
         
         ;-----------------------------------------------------------------------
-+       jmp .kernal_chrout_scr  ; handle the PETSCII control code
++       jmp .kernal_chrout      ; handle the PETSCII control code
 
 
 .bsod_hook:
@@ -1020,7 +1019,7 @@ bsod_push:
         lsr                     ; ...
         cmp # 9+1
         adc # $30               ; rebase to PETSCII '0' and above
-        jsr .kernal_chrout_scr  ; NOTE: no effect from decimal mode?
+        jsr .kernal_chrout      ; NOTE: no effect from decimal mode?
 
         pla                     ; retrieve original value
         and # %00001111         ; extract lower nybble
@@ -1031,7 +1030,7 @@ bsod_push:
         
         ; print the last digit
         ; (X & Y are preserved)
-        jmp .kernal_chrout_scr
+        jmp .kernal_chrout
 
 
 .bsod_print_bin8:
@@ -1056,7 +1055,7 @@ bsod_push:
         tax                     ; remember remainder for next loop
         lda # $30               ; PETSCII '0'
         adc # 0                 ; PETSCII '1' if bit was 1
-        jsr .kernal_chrout_scr  ; print digit
+        jsr .kernal_chrout      ; print digit
 
         txa                     ; retrieve remaining value before looping
         asl @count              ; shift counter along
@@ -1074,7 +1073,7 @@ bsod_push:
         lda # $2a               ; PETSCII '*'
         +bit_skip2              ; `bit $....` (skip next 2-byte instruction)
 +       lda # $2d               ; PETSCII '-'
-        jsr .kernal_chrout_scr
+        jsr .kernal_chrout
         
         txa                     ; retrieve remaining value before looping
         asl @count              ; shift counter along
