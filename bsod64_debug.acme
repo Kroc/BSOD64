@@ -115,6 +115,33 @@
 ;;        lda .frzn_sp
 ;;        jsr .bsod_print_hex8_pos
 
+;;.bsod_set_cursor:
+;;;=============================================================================
+;;; set the cursor positon:
+;;; (saves a byte every time we have to do this)
+;;;
+;;; in:   X       screen row
+;;;       Y       screen column
+;;;-----------------------------------------------------------------------------
+;;        clc                     ; = set cursor
+;;        jmp .kernal_plot_addr   ; call KERNAL to position cursor
+
+;;.bsod_print_hex8_pos:
+;;;=============================================================================
+;;; print a byte as PETSCII hexadecimal at a given screen row/column:
+;;;
+;;; in:   A       byte value
+;;;       X       screen row
+;;;       Y       screen col
+;;;
+;;;-----------------------------------------------------------------------------
+;;        pha                     ; put aside original value
+;;        jsr .bsod_set_cursor    ; position the cursor
+;;        pla                     ; retrieve original value
+;;
+;;        ; fallthrough
+;;        ; ...
+
 .bsod_debug:
 ;===============================================================================
 ; launch the debugger UI

@@ -148,6 +148,9 @@ BSOD64_DATA_ADDR = $7000
 ;
 .STR_END                = $00   ; standard terminator
 .STR_POS                = $01   ; change cursor pos; row & col bytes follow
+.STR_HEXB               = $0f   ; print the 8-bit value that follows in hex
+.STR_HEXW               = $10   ; print the 16-bit value that follows in hex
+.STR_FLAGS              = $06   ; print a binary value as a set of flags
 
 ; constants for memory-layout:
 ;
@@ -549,45 +552,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;===============================================================================
 ;
 ;-------------------------------------------------------------------------------
-        lda #< .bsod_str_top
-        ldx #> .bsod_str_top
-        jsr .bsod_print
-
-        ; print frozen registers:
-        ;-----------------------------------------------------------------------
-        ; print frozen program-counter:
-        ldx .frzn_pc_lo
-        lda .frzn_pc_hi
-        jsr .bsod_print_hex16
-        lda # " "
-        jsr .kernal_chrout_scr
-
-        ; print frozen A-register:
-        lda .frzn_a
-        jsr .bsod_print_hex8
-        lda # " "
-        jsr .kernal_chrout_scr
-
-        ; print frozen X-register:
-        lda .frzn_x
-        jsr .bsod_print_hex8
-        lda # " "
-        jsr .kernal_chrout_scr
-
-        ; print frozen Y-register:
-        lda .frzn_y
-        jsr .bsod_print_hex8
-        lda # " "
-        jsr .kernal_chrout_scr
-
-        ; print frozen cpu-flags:
-        lda .frzn_f
-        sec
-        jsr .bsod_print_bin8
-        lda # " "
-        jsr .kernal_chrout_scr
-        
-        ; print the frozen ROM/RAM bank state:
+        ; decode the frozen ROM/RAM bank state:
         ;-----------------------------------------------------------------------
         ; VIC bank is done first as other banking goes over this
         ;
@@ -636,27 +601,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sty .bsod_str_banks_b+0
         sty .bsod_str_banks_b+1
 
-        ; print the bank breakdown:
-        lda #< .bsod_str_banks
-        ldx #> .bsod_str_banks
+        ; print frozen registers and banks:
++       lda #< .bsod_str_top
+        ldx #> .bsod_str_top
         jsr .bsod_print
 
         ; print frozen zero-page & stack:
         ;-----------------------------------------------------------------------
-        ; print the header line
-        lda #< .bsod_str_zp
-        ldx #> .bsod_str_zp
-        jsr .bsod_print
-
-        ; print the stack index:
-        ; (note that the stack index points to the next *unused* position)
-        lda .frzn_sp
-        jsr .bsod_print_hex8
-        lda # .PET_RVSOFF
-        jsr .kernal_chrout_scr
-        lda # .PET_RETURN
-        jsr .kernal_chrout_scr
-
         ; the stack index points to the next *unused* position
         ldy .frzn_sp            ; top stack address
         ldx # 0                 ; starting zero-page address
@@ -746,14 +697,38 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 .bsod_str_top:
 ;-------------------------------------------------------------------------------
         !pet    .PET_WHITE, .PET_CLR, .PET_LCASE, .PET_CASEOFF
-        !pet    .PET_RVSON
-        !pet    "PC:   A: X: Y: NV-BDIZC 0123456789ABCDEF"
-        !pet    .PET_RVSOFF
-        !pet    "$", .STR_END
+        !pet    .PET_RVSON, "PC:   A: X: Y: NV-BDIZC 0123456789ABCDEF"
+        !pet    .PET_RVSOFF, "$"
+        ; these values have to be stored within the code space because they
+        ; have to be backed up early, before the I/O shield is turned off.
+        ; if BSDO64 can run at all then, logically, these addresses are
+        ; accessible
+        !pet    .STR_HEXW
+.frzn_pc:
+.frzn_pc_lo:
+        !byte   $00
+.frzn_pc_hi:
+        !byte   $00
+        !pet    " "
+        !pet    .STR_HEXB
+.frzn_a:
+        !byte   $00
+        !pet    " "
+        !pet    .STR_HEXB
+.frzn_x:
+        !byte   $00
+        !pet    " "
+        !pet    .STR_HEXB
+.frzn_y:
+        !byte   $00
+        !pet    " "
+        !pet    .STR_FLAGS
+.frzn_f:
+        !byte   %00000000
+        !pet    " "
 
 .bsod_str_banks:
-;-------------------------------------------------------------------------------
-        !byte   .STR_POS, 1, 24
+        ;-----------------------------------------------------------------------
 .bsod_str_banks_vic:
 .bsod_str_banks_vic0:           ; VIC-bank 0 ($0000-$3FFF)
         !pet    "...."          ; zeropage, stack, work RAM
@@ -769,13 +744,17 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    "."             ; I/O ($D000-$DFFF)
 .bsod_str_banks_k:
         !pet    ".."            ; KERNAL ROM ($E000-$FFFF)
-        !pet    .STR_END
 
 .bsod_str_zp:
-;-------------------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
         !pet    "zeropage:                      stack:$"
+        !pet    .STR_HEXB
+.frzn_sp:
+        !byte   $00
+        !pet    .PET_RVSOFF
+        !pet    .PET_RETURN, .PET_RETURN
         !pet    .STR_END
 
 -       rts
@@ -817,6 +796,41 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jsr .kernal_plot_addr   ; call KERNAL to position cursor
 @y      ldy # .NULL_VALUE       ; restore string index
         bne @loop
+
+        ; .STR_HEXW : print 16-bit hexadecimal value
+        ;-----------------------------------------------------------------------
++       cmp # .STR_HEXW         ; =.STR_HEXW? -- print 16-bit hexadecimal value
+        bne +
+
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read value to print, hi-byte
+        tax                     ; put aside hi-byte
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read value to print, lo-byte
+        jsr .bsod_print_hex16
+        bne @loop
+
+        ; .STR_HEXB : print 8-bit hexadecimal value
+        ;-----------------------------------------------------------------------
++       cmp # .STR_HEXB         ; =.STR_HEXB? -- print 8-bit hexadecimal value
+        bne +
+
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read value to print
+        jsr .bsod_print_hex8    ; print two hexadecimal digits
+        bne @loop
+
+        ; .STR_FLAGS : print 8-bit binary value as flags
+        ;-----------------------------------------------------------------------
++       cmp # .STR_FLAGS        ; =.STR_FLAGS?
+        bne +
+
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read value to print
+        sec
+        jsr .bsod_print_bin8
+        bne @loop
+        beq @loop
 
 +       jsr .kernal_chrout_scr  ; handle the PETSCII control code
         bne @loop               ; keep looping
@@ -974,46 +988,18 @@ bsod_push:
         !byte   .NULL_VALUE
 
 
-;;.bsod_set_cursor:
-;;;=============================================================================
-;;; set the cursor positon:
-;;; (saves a byte every time we have to do this)
-;;;
-;;; in:   X       screen row
-;;;       Y       screen column
-;;;-----------------------------------------------------------------------------
-;;        clc                     ; = set cursor
-;;        jmp .kernal_plot_addr   ; call KERNAL to position cursor
-
-
 .bsod_print_hex16:
 ;===============================================================================
 ; print a 16-bit value as PETSCII hexadecimal:
 ;
 ; in:   A       value, hi-byte
 ;       X       value, lo-byte
-;
 ;-------------------------------------------------------------------------------
         jsr .bsod_print_hex8    ; print hi-byte first, X will be preserved
         txa                     ; switch to value's lo-byte
-        ;;jmp .bsod_print_hex8
 
-
-;;.bsod_print_hex8_pos:
-;;;=============================================================================
-;;; print a byte as PETSCII hexadecimal at a given screen row/column:
-;;;
-;;; in:   A       byte value
-;;;       X       screen row
-;;;       Y       screen col
-;;;
-;;;-----------------------------------------------------------------------------
-;;        pha                     ; put aside original value
-;;        jsr .bsod_set_cursor    ; position the cursor
-;;        pla                     ; retrieve original value
-;;
-;;        ; fallthrough
-;;        ; ...
+        ; fallthrough
+        ; ...
 
 .bsod_print_hex8:
 ;===============================================================================
@@ -1022,7 +1008,6 @@ bsod_push:
 ; in:   A       byte value
 ;
 ; out:  X, Y    (preserved)
-;
 ;-------------------------------------------------------------------------------
         sed                     ; enable decimal mode
         pha                     ; put original value aside
@@ -1054,19 +1039,20 @@ bsod_push:
 ; in:   A       value
 ;      -c       use 0/1 digits
 ;      +c       use -/* digits
-;       X       screen row
-;       Y       screen col
+; out:  Y       (preserved)
 ;
+; TODO: use a sliding bit to count 8 times instead of Y-register
 ;-------------------------------------------------------------------------------
-        ldy # 8                 ; print 8-bits
-
         ; check the carry state. if carry is set binary
         ; digits will be printed as "-" = 0 and "*" = 1
         bcs @sym                ; carry set = use symbols
 
+@dig:   sty @y1+1               ; backup Y-register
+        ldy # 8                 ; print 8-bits
+
         ; print "0" & "1" digits
         ;-----------------------------------------------------------------------
-@dig    asl                     ; pop a bit off the value
+-       asl                     ; pop a bit off the value
         tax                     ; remember remainder for next loop
         lda # $30               ; PETSCII '0'
         adc # 0                 ; PETSCII '1' if bit was 1
@@ -1074,13 +1060,17 @@ bsod_push:
 
         txa                     ; retrieve remaining value before looping
         dey                     ; 1 digit down
-        bne @dig                ; any more left?
+        bne -                   ; any more left?
 
+@y1     ldy # .NULL_VALUE
         rts
 
         ; print "-" & "*" digits
         ;-----------------------------------------------------------------------
-@sym    asl                     ; pop a bit off the value
+@sym:   sty @y2+1               ; backup Y-register
+        ldy # 8                 ; print 8-bits
+
+-       asl                     ; pop a bit off the value
         tax                     ; remember remainder for next loop
 
         bcc +                   ; is bit 0 or 1?
@@ -1091,8 +1081,9 @@ bsod_push:
         
         txa                     ; retrieve remaining value before looping
         dey                     ; 1 digit down
-        bne @sym                ; any more left?
+        bne -                   ; any more left?
 
+@y2     ldy # .NULL_VALUE
         rts
 
 
@@ -1101,23 +1092,6 @@ bsod_push:
 ; backed up early, before the I/O shield is turned if the BSDO64 code can run
 ; at all then, logically, these addresses are accessible
 ;
-.frzn_a:        ; backup of the A register
-        !byte   .NULL_VALUE
-.frzn_x:        ; backup of the X register
-        !byte   .NULL_VALUE
-.frzn_y:        ; backup of the Y register
-        !byte   .NULL_VALUE
-
-.frzn_sp:       ; backup of stack pointer
-        !byte   .NULL_VALUE
-.frzn_pc:       ; backup of program counter
-.frzn_pc_lo:
-        !byte   .NULL_VALUE
-.frzn_pc_hi:
-        !byte   .NULL_VALUE
-.frzn_f:        ; backup of processor flags
-        !byte   .NULL_VALUE
-
 .frzn_cpu_ddir: ; backup of the CPU data-direction port ($00)
         !byte   .NULL_VALUE
                         
