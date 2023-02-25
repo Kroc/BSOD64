@@ -761,7 +761,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    .PET_RETURN, .PET_RETURN
         !pet    .STR_END
 
--       rts
+--      rts
 
 .bsod_print:
 ;===============================================================================
@@ -771,13 +771,17 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sta .zp_str_lo          ; store the PETSCII string
         stx .zp_str_hi          ;  address in zero-page for indexing
         ldy # -1                ; string index (start at -1 for pre-increment)
+        bne @loop               ; jump into the loop
+
+        ;-----------------------------------------------------------------------
+-       jsr @cc                 ; handle custom control code
 
 @loop:  iny                     ; move to next character
         lda (.zp_str), y        ; read character from string
-        beq -                   ; = .STR_END? -- stop printing
+        beq --                  ; = .STR_END? -- stop printing
         cmp # $20               ; values $00-$1F are control codes
-        bcc +
-        
+        bcc -                   ; handle custom control code?
+
         ; not a control code:
         jsr .kernal_chrout_scr  ; print the character
         bne @loop               ; keep looping
@@ -786,7 +790,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
         ; .STR_POS : set cursor location
         ;-----------------------------------------------------------------------
-+       cmp # .STR_POS          ; =.STR_POS? -- set cursor position
+@cc:    cmp # .STR_POS          ; =.STR_POS? -- set cursor position
         bne +
 
         iny                     ; (move to next byte in string)
@@ -799,7 +803,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         clc                     ; = set cursor
         jsr .kernal_plot_addr   ; call KERNAL to position cursor
 @y      ldy # .NULL_VALUE       ; restore string index
-        bne @loop
+        rts
 
         ; .STR_HEXW : print 16-bit hexadecimal value
         ;-----------------------------------------------------------------------
@@ -811,8 +815,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         tax                     ; put aside hi-byte
         iny                     ; (move to next byte in string)
         lda (.zp_str), y        ; read value to print, lo-byte
-        jsr .bsod_print_hex16
-        bne @loop
+        jmp .bsod_print_hex16
 
         ; .STR_HEXB : print 8-bit hexadecimal value
         ;-----------------------------------------------------------------------
@@ -821,8 +824,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         iny                     ; (move to next byte in string)
         lda (.zp_str), y        ; read value to print
-        jsr .bsod_print_hex8    ; print two hexadecimal digits
-        bne @loop
+        jmp .bsod_print_hex8    ; print two hexadecimal digits
 
         ; .STR_FLAGS : print 8-bit binary value as flags
         ;-----------------------------------------------------------------------
@@ -832,14 +834,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         iny                     ; (move to next byte in string)
         lda (.zp_str), y        ; read value to print
         sec
-        jsr .bsod_print_bin8
-        bne @loop
-        beq @loop
-
-+       jsr .kernal_chrout_scr  ; handle the PETSCII control code
-        bne @loop               ; keep looping
-
-        rts
+        jmp .bsod_print_bin8
+        
+        ;-----------------------------------------------------------------------
++       jmp .kernal_chrout_scr  ; handle the PETSCII control code
 
 
 .bsod_hook:
