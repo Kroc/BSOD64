@@ -79,7 +79,7 @@ BSOD64_DATA_ADDR = $7000
 !ifndef BSOD64_DATA_ADDR        BSOD64_DATA_ADDR = $d000
 
 ; is the data under I/O?
-!if BSOD64_DATA_ADDR >= $c000 & BSOD64_DATA_ADDR < $d000 {
+!if BSOD64_DATA_ADDR >= $d000 & BSOD64_DATA_ADDR < $e000 {
         BSOD64_UNDER_IO = 1
 }
 
