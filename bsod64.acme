@@ -264,19 +264,25 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda .stack+6, x         ; read processor flags from interrupt
         sta .frzn_f             ; keep an original copy
 
-        ; and lastly the program-counter. the 6502 processor always auto-
-        ; increments the program counter when executing an RTS or RTI
-        ; instruction, so the address pushed on the stack is always one
-        ; less than the next instruction in the code
-        ;
-        clc
+        ; and lastly the program-counter
         lda .stack+7, x         ; program counter lo-byte
-        adc # 1                 ; add one to correct shown PC
         sta .frzn_pc_lo         ; store as frozen PC, lo-byte
         lda .stack+8, x         ; program counter hi-byte
-        adc # 0                 ; if the +1 overflowed, increment hi-byte
         sta .frzn_pc_hi         ; store as frozen PC, hi-byte
 
+        ; during an IRQ or NMI, the PC on the stack is that of the next
+        ; instruction to be executed. however, the 6502 processor always
+        ; auto-increments the program counter during an RTS instruction,
+        ; so the address pushed on the stack with JSR is one less than
+        ; the next instruction in the code -- if BSOD64 is invoked by
+        ; JSR then we need to correct for this!
+        ;
+        bit .bsod_is_jsr        ; check for the JSR flag
+        bpl +                   ; skip over if NMI/IRQ/BRK
+        inc .frzn_pc_lo         ; add 1 to the PC, lo-byte
+        bne +                   ; if no overflow, finished
+        inc .frzn_pc_hi         ; lo overflow, add 1 to PC, hi-byte 
++       
         ; freeze low-memory:
         ;-----------------------------------------------------------------------
         ; the area we will backup to is under I/O, so before we can write there
@@ -294,7 +300,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda .zp+0               ; current CPU data-direction register
         sta .frzn_cpu_ddir      ; save to frozen state
         lda # %00101111         ; reset the data-direction register,
-        sta .zp+0               ; to its default value
+        sta .zp+0               ;  to its default value
         lda .zp+1               ; current CPU port value
         sta .frzn_cpu_port      ; save to frozen state
 
