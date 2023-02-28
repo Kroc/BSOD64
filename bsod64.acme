@@ -65,7 +65,7 @@
 ; if 1, does not include the debugger, only the BSOD screen
 !ifndef BSOD64_BSODONLY         BSOD64_BSODONLY = 1
 
-BSOD64_CODE_ADDR = $7c80        ;sys 31872
+BSOD64_CODE_ADDR = $7c40        ;sys 31808
 BSOD64_DATA_ADDR = $7000
 
 ; when BSOD64 is invoked, the areas of memory that BSOD64 needs to re-use are
@@ -661,8 +661,64 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; print the stack value:
 +       jsr .bsod_bsod_stack
 
-        jmp *
-        rts
+        ; print the bottom status bar
+        ;-----------------------------------------------------------------------
+        lda #< .bsod_str_status
+        ldx #> .bsod_str_status
+        jsr .bsod_print
+        lda # $a0               ; screen code for reverse space
+        sta .screen+(40*24)+39
+
+        ; keyloop:
+        ;=======================================================================
+.wait_for_key:
+        jsr .kernal_scnkey      ; why isn't this being done in the std IRQ?
+        jsr .kernal_getin
+        beq .wait_for_key
+        
+        cmp # .PET_F1
+        beq @f1
+        bne .wait_for_key
+
+        ; restore original screen:
+        ;-----------------------------------------------------------------------
+        ; this is incomplete because it assumes a text screen in VIC bank 0
+        ; and makes no effort to restore sprites, screen scroll etc.
+        ;
+@f1:    lda .frzn_vic + .VIC_SCREEN_BKGRND
+        sta .vic      + .VIC_SCREEN_BKGRND
+        lda .frzn_vic + .VIC_SCREEN_BORDER
+        sta .vic      + .VIC_SCREEN_BORDER
+
+        ; restore which ROM character set was in use
+        ; does not yet handle RAM-defined chars yet
+        lda .frzn_vic + .VIC_LAYOUT
+        and # %00001110
+        ora # %00010000         ; use $0400 for screen memory
+        sta .vic + .VIC_LAYOUT
+
+        ldx # 0
+-       lda .frzn_screen + $000, x
+        sta .screen      + $000, x
+        lda .frzn_color  + $000, x
+        sta .vic_color   + $000, x 
+        lda .frzn_screen + $100, x
+        sta .screen      + $100, x
+        lda .frzn_color  + $100, x
+        sta .vic_color   + $100, x
+        lda .frzn_screen + $200, x
+        sta .screen      + $200, x
+        lda .frzn_color  + $200, x
+        sta .vic_color   + $200, x
+        lda .frzn_screen + $300, x
+        sta .screen      + $300, x
+        lda .frzn_color  + $300, x
+        sta .vic_color   + $300, x
+        dex
+        
+        bne -
+
+        jmp .wait_for_key
 
 .bsod_bsod_zp_cr:
         ;-----------------------------------------------------------------------
@@ -755,7 +811,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 .bsod_str_banks_k:
         !pet    ".."            ; KERNAL ROM ($E000-$FFFF)
 
-.bsod_str_zp:
+.bsod_str_zpstack:
         ;-----------------------------------------------------------------------
         !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
@@ -766,7 +822,15 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    .PET_RVSOFF, .PET_RETURN
         !pet    .STR_END
 
+.bsod_str_status:
+;-------------------------------------------------------------------------------
+        !byte   .PET_RETURN, .PET_RVSON
+        !pet    "NMI                           F1:SCREEN"
+        !byte   .PET_RVSOFF
+        !byte   .STR_END
+
 --      rts
+
 
 .bsod_print:
 ;===============================================================================
@@ -852,9 +916,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sei                     ; disable interrupts whilst we alter them...
         
         lda #< .bsod_hook_nmi
-        sta .vectors+.VECTOR_NMI+.lo
+        sta .vectors + .VECTOR_NMI+.lo
         lda #> .bsod_hook_nmi
-        sta .vectors+.VECTOR_NMI+.hi
+        sta .vectors + .VECTOR_NMI+.hi
 
         cli                     ; re-enable interrupts
         rts
@@ -867,17 +931,17 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         tya
         pha
 
-        jsr bsod_irq
+        jmp bsod_irq            ; we won't ever be returning from here!
 
-        pla
-        tay
-        pla
-        tax
-        pla
-
-        ; return from interrupt
-        ; (restore processor flags, enable interrupts)
-        rti
+;;        pla
+;;        tay
+;;        pla
+;;        tax
+;;        pla
+;;
+;;        ; return from interrupt
+;;        ; (restore processor flags, enable interrupts)
+;;        rti
 
 
 ;===============================================================================
@@ -912,7 +976,7 @@ bsod_irq_kernalon:
 bsod_irq_nokernal:
         ;-----------------------------------------------------------------------
         ; acknowledge the interrupt
-        asl .cia1+.CIA_IRQ
+        asl .cia1 + .CIA_IRQ
         
         ; return from interrupt
         ; (restore processor flags, enable interrupts)
@@ -924,7 +988,7 @@ bsod_irq_nokernal:
 bsod_nmi_nokernal:
         ;-----------------------------------------------------------------------
         ; acknowledge the interrupt (we must R/M/W the register)
-        asl .cia2+.CIA_IRQ
+        asl .cia2 + .CIA_IRQ
 
 bsod_nmi_kernalon:
         ;-----------------------------------------------------------------------
@@ -976,23 +1040,8 @@ bsod_push:
         sta .bsod_is_jsr
 
         ; now begin the freeze
-        jsr .bsod_freeze
-
-        ; fallthrough
-        ; ...
-
-.bsod_defrost:
-;===============================================================================
-        rts
-
-
-; depending on how BSDO64 is invoked, different actions
-; must be taken during the freeze and defrost
-;
-.bsod_is_jsr:   ; BSOD64 invoked by JSR? $00 = no, $FF = yes
-        !byte   .NULL_VALUE
-.bsod_is_brk:   ; BRK interrupt flag: $00 = no, $FF = yes
-        !byte   .NULL_VALUE
+        ; we will never be returning from this!
+        jmp .bsod_freeze
 
 
 .bsod_print_hex16:
@@ -1091,6 +1140,14 @@ bsod_push:
 @count  !byte   $00000001
 
 ;===============================================================================
+; depending on how BSDO64 is invoked, different actions
+; must be taken during the freeze and defrost
+;
+.bsod_is_jsr:   ; BSOD64 invoked by JSR? $00 = no, $FF = yes
+        !byte   .NULL_VALUE
+.bsod_is_brk:   ; BRK interrupt flag: $00 = no, $FF = yes
+        !byte   .NULL_VALUE
+
 ; these values have to be stored within the code space because they have to be
 ; backed up early, before the I/O shield is turned if the BSDO64 code can run
 ; at all then, logically, these addresses are accessible
