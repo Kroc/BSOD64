@@ -445,15 +445,15 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; number for screen memory to $04 just before it exits, but does
         ; not change the actual VIC bank
         ;
-        jsr .kernal_ramtas_addr
+        jsr .kernal_ramtas
 
         ; restore the default vector table at $0314-$0333:
         ; this will ensure that KERNAL-handled interrupts will point back
         ; to the KERNAL and not to code from the frozen program
-        jsr .kernal_restor_addr
+        jsr .kernal_restor
 
         ; re-initialise VIC-II
-        jsr .kernal_scinit_addr
+        jsr .kernal_scinit
 
         ; a BSOD must be blue...
         lda # .VIC_BLUE
@@ -463,7 +463,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; re-initialise CIAs, get interrupts running again.
         ; also silences the SID chip
-        jsr .kernal_ioinit_addr
+        jsr .kernal_ioinit
 
         lda # %00011011         ; 25 rows, screen on
         sta .vic+.VIC_SCREEN_VERT
@@ -806,7 +806,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sty @y+1                ; (backup Y before KERNAL call)
         tay                     ; move cursor col to Y-register
         clc                     ; = set cursor
-        jsr .kernal_plot_addr   ; call KERNAL to position cursor
+        jsr .kernal_plot        ; call KERNAL to position cursor
 @y      ldy # .NULL_VALUE       ; restore string index
         rts
 
