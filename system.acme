@@ -481,6 +481,8 @@
 .VIC_SPRITE6_COLOR      = $2d   ;=$D02D
 .VIC_SPRITE7_COLOR      = $2e   ;=$D02E
 
+.VIC_COUNT              = $2e   ; number of VIC registers ($D000-$D02E)
+
 ; CIA1+2 registers:
 ;-------------------------------------------------------------------------------
 .CIA_PORTA              = $00   ;=$DC00/$DD00

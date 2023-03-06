@@ -65,7 +65,7 @@
 ; if 1, does not include the debugger, only the BSOD screen
 !ifndef BSOD64_BSODONLY         BSOD64_BSODONLY = 1
 
-BSOD64_CODE_ADDR = $7c40        ;sys 31808
+BSOD64_CODE_ADDR = $7c80        ;sys 31872
 BSOD64_DATA_ADDR = $7000
 
 ; when BSOD64 is invoked, the areas of memory that BSOD64 needs to re-use are
@@ -377,7 +377,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 }
         ; backup the VIC-II state before we start changing the screen
         ;
-        ldx # $2e               ; number of VIC-II registers
+        ldx # .VIC_COUNT        ; number of VIC-II registers
 -
 !ifdef  BSOD64_UNDER_IO         inc .zp+1
         lda .vic, x             ; read the VIC-II register
@@ -666,7 +666,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #< .bsod_str_status
         ldx #> .bsod_str_status
         jsr .bsod_print
-        lda # $a0               ; screen code for reverse space
+        ; we can't print the bottom-rightmost character on the screen
+        ; or it'll scroll, so we POKE it in manually
+        ;
+        lda # $a0               ; (screen code for reverse space)
         sta .screen+(40*24)+39
 
         ; keyloop:
@@ -685,39 +688,71 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; this is incomplete because it assumes a text screen in VIC bank 0
         ; and makes no effort to restore sprites, screen scroll etc.
         ;
-@f1:    lda .frzn_vic + .VIC_SCREEN_BKGRND
-        sta .vic      + .VIC_SCREEN_BKGRND
-        lda .frzn_vic + .VIC_SCREEN_BORDER
-        sta .vic      + .VIC_SCREEN_BORDER
+@f1:    sei                     ; disable interrupts whilst we mess with memory
+        lda # .MEM_ALL_RAM
+        sta .zp+1
 
-        ; restore which ROM character set was in use
-        ; does not yet handle RAM-defined chars yet
-        lda .frzn_vic + .VIC_LAYOUT
-        and # %00001110
-        ora # %00010000         ; use $0400 for screen memory
-        sta .vic + .VIC_LAYOUT
-
+        ; restore pages 4-7 & colour RAM:
+        ;
+        ; BSOD64 uses VIC bank 0 and $0400-$07FF for the screen, but the
+        ; frozen program might have been using somewhere else. even if the
+        ; program is not using $0400 for the screen, we still restore that
+        ; area just in case it's using it for a custom font!
+        ;
         ldx # 0
 -       lda .frzn_screen + $000, x
         sta .screen      + $000, x
-        lda .frzn_color  + $000, x
-        sta .vic_color   + $000, x 
         lda .frzn_screen + $100, x
         sta .screen      + $100, x
-        lda .frzn_color  + $100, x
-        sta .vic_color   + $100, x
         lda .frzn_screen + $200, x
         sta .screen      + $200, x
-        lda .frzn_color  + $200, x
-        sta .vic_color   + $200, x
         lda .frzn_screen + $300, x
         sta .screen      + $300, x
-        lda .frzn_color  + $300, x
-        sta .vic_color   + $300, x
-        dex
-        
-        bne -
 
+        ; colour RAM backup has to be read from RAM that could be under I/O
+        ; and written with I/O on, so instead of oscilating I/O every byte
+        ; we read four bytes ahead of time
+        ;
+        lda .frzn_color  + $300, x      ; (colour RAM backup $DB00-$DBFF)
+        pha
+        lda .frzn_color  + $200, x      ; (colour RAM backup $DA00-$DAFF)
+        pha
+        lda .frzn_color  + $100, x      ; (colour RAM backup $D900-$D9FF)
+        pha
+        lda .frzn_color  + $000, x      ; (colour RAM backup $D800-$D8FF)
+        inc .zp+1                       ; enable I/O
+        sta .vic_color   + $000, x
+        pla
+        sta .vic_color   + $100, x
+        pla
+        sta .vic_color   + $200, x
+        pla
+        sta .vic_color   + $300, x
+        dec .zp+1                       ; disable I/O
+
+        dex
+        bne -
+        
+        ; restore VIC-II state:
+        ; NOTE:
+        ; - a write to $D012 & $D011 bit 7 sets the VIC-II interrupt raster
+        ;   line, and $D01A bit 0 enables raster interrupts. BSOD64 has a
+        ;   dummy interrupt handler, but for stability we disable raster
+        ;   interrupts after setting the VIC-II state
+        ;
+        ldx # .VIC_COUNT+1
+-       lda .frzn_vic-1, x
+        inc .zp+1                       ; enable I/O
+        sta .vic-1,      x
+        dec .zp+1                       ; disable I/O
+        dex
+        bne -
+        inc .zp+1                       ; enable I/O
+        stx .vic+.VIC_IRQ_CONTROL       ; disable VIC-II interrupts (X=$00)
+
+        lda # .MEM_DEFAULT
+        sta .zp+1                       ; restore KERNAL, BASIC & I/O
+        cli                             ; re-enable interrupts
         jmp .wait_for_key
 
 .bsod_bsod_zp_cr:
