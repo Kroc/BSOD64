@@ -77,6 +77,18 @@
 .PET_CRSR_LT            = $9d   ; move the cursor left a column!
 .PET_CRSR_RT            = $1d   ; move the cursor right a column!
 
+.PET_0                  = $30   ; 0
+.PET_9                  = $39   ; 9
+.PET_PLUS               = $2b   ; +
+.PET_MINUS              = $2d   ; -
+
+.PET_A_LO               = $41   ; a
+.PET_F_LO               = $47   ; f
+.PET_Z_LO               = $5a   ; z
+.PET_A_UP               = $c1   ; A
+.PET_F_UP               = $c6   ; F
+.PET_Z_UP               = $da   ; Z
+
 .PET_SPC                = $20
 .PET_RETURN             = $0d
 

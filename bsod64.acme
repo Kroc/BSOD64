@@ -522,11 +522,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #> bsod_irq_nokernal
         sta .cpu_irq_hi
 
-        ; re-initialise the CIAs, enable I/O and BASIC+KERNAL ROMs,
-        ; also silences the SID chip
-        ;
-        jsr .kernal_ioinit      ; (does not enable interrupts)
-
         ; fallthrough
         ; ...
 
@@ -534,6 +529,11 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;===============================================================================
 ;
 ;-------------------------------------------------------------------------------
+        ; re-initialise the CIAs, enable I/O and BASIC+KERNAL ROMs,
+        ; also silences the SID chip
+        ;
+        jsr .kernal_ioinit      ; (does not enable interrupts)
+
         ; re-initialise VIC-II
         jsr .kernal_scinit      ; (does not enable interrupts)
 
@@ -597,13 +597,27 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sty .bsod_str_banks_b+0
         sty .bsod_str_banks_b+1
 
-        ; print frozen registers and banks:
 +       lda #< .bsod_str_top
         ldx #> .bsod_str_top
         jsr .bsod_print
 
+.bsod_BSOD_refresh:
+        ;=======================================================================
+        lda #< .bsod_str_mem
+        ldx #> .bsod_str_mem
+        jsr .bsod_print
+
         ; print frozen zero-page & stack:
         ;-----------------------------------------------------------------------
+        ; select the page of memory to view (default: $0)
+        lda .frzn_page
+        ; instead of showing the actual page $0-7,
+        ; show the contents of the frozen version
+        cmp # 8
+        bcs +
+        adc # >BSOD64_DATA_ADDR ; re-base into the frozen data area
++       sta @page+2
+        
         ; the stack index points to the next *unused* position
         ldy .frzn_sp            ; top stack address
         ldx # 0                 ; starting zero-page address
@@ -614,14 +628,14 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         beq +
         lda # .PET_WHITE
         +bit_skip2
-+       lda # .PET_LTBLUE
++       lda # .PET_CYAN
         jsr .kernal_chrout
 
 !ifdef  BSOD64_UNDER_IO {
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
 }       ; read byte from frozen zero-page
-        lda .frzn_zp, x
+@page   lda .frzn_zp, x
         pha
 !ifdef  BSOD64_UNDER_IO {
         lda # .MEM_DEFAULT      ; turn *on* KERNAL,
@@ -665,12 +679,59 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jsr .kernal_getin
         beq .wait_for_key
         
-        cmp # .PET_F1
-        beq @f1
-        bne .wait_for_key
+        cmp # .PET_CRSR_UP
+        beq @page_prev
+        cmp # .PET_CRSR_LT
+        beq @page_prev
+        cmp # .PET_CRSR_DN
+        beq @page_next
+        cmp # .PET_CRSR_RT
+        beq @page_next
+        cmp # .PET_0
+        bcc +
+        cmp # .PET_9+1
+        bcc @page_jump_09
++       cmp # .PET_A_LO
+        bcc +
+        cmp # .PET_F_LO+1
+        bcc @page_jump_AF
++       cmp # .PET_F1
+        bne +
+        jmp @f1
 
-        ; restore original screen:
-        ;-----------------------------------------------------------------------
++       jmp .wait_for_key
+
+        ; change memory page:
+        ;=======================================================================
+@page_jump_09:
+        sbc # (.PET_0)-1        ; adjust PETSCII code to 0-9
+        !byte $2c               ; (skip next two bytes)
+@page_jump_AF:
+        sbc # (.PET_A_LO-10)-1  ; adjust PETSCII code to 10-15
+        asl                     ; 
+        asl                     ; shift value $0-$F
+        asl                     ;  to upper nybble
+        asl                     ;
+        sta @hi+1               ; combine with lo-nybble later
+
+        lda .frzn_page          ; current selected memory page
+        and # %00001111         ; retain the lo-nybble
+@hi     ora # .NULL_VALUE       ; add the new hi-nybble
+        sta .frzn_page          ; update selected memory page
+        jmp .bsod_BSOD_refresh  ; redraw the memory dump
+
+@page_next:
+        ; add 1 to hi-byte of memory page to display
+        inc .frzn_page
+        jmp .bsod_BSOD_refresh
+
+@page_prev:
+        ; subtract 1 from hi-byte of memory page to display
+        dec .frzn_page
+        jmp .bsod_BSOD_refresh
+
+        ; F1: restore original screen:
+        ;=======================================================================
         ; this is incomplete because it assumes a text screen in VIC bank 0
         ; and makes no effort to restore sprites, screen scroll etc.
         ;
@@ -720,6 +781,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne -
         
         ; restore VIC-II state:
+        ;
         ; NOTE:
         ; - a write to $D012 & $D011 bit 7 sets the VIC-II interrupt raster
         ;   line, and $D01A bit 0 enables raster interrupts. BSOD64 has a
@@ -736,6 +798,11 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         inc .zp+1                       ; enable I/O
         stx .vic+.VIC_IRQ_CONTROL       ; disable VIC-II interrupts (X=$00)
 
+        ; restore VIC bank:
+        lda .frzn_cia2
+        sta .cia2+.CIA_PORTA
+
+        ; set memory layout:
         lda # .MEM_DEFAULT
         sta .zp+1                       ; restore KERNAL, BASIC & I/O
         cli                             ; re-enable interrupts
@@ -837,16 +904,23 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    "."             ; I/O ($D000-$DFFF)
 .bsod_str_banks_k:
         !pet    ".."            ; KERNAL ROM ($E000-$FFFF)
+        !pet    .STR_END
 
-.bsod_str_zpstack:
+.bsod_str_mem:
         ;-----------------------------------------------------------------------
         !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
-        !pet    "zeropage:                      stack:$"
+        !pet    "$"
+        !pet    .STR_HEXB
+.frzn_page:
+        !byte   $00
+        !pet    "xx <CRSR>                   stack:$"
         !pet    .STR_HEXB
 .frzn_sp:
         !byte   $00
-        !pet    .PET_RVSOFF, .PET_RETURN
+        !pet    .PET_RVSOFF, .PET_LTBLUE
+        !pet    "    -0-1-2-3-4-5-6-7-8-9-A-B-C-D-E-F"
+        !pet    .PET_WHITE, .PET_RETURN
         !pet    .STR_END
 
 .bsod_str_status:
