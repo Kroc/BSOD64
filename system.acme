@@ -14,6 +14,16 @@
         !byte $f2
 }
 
+; constants for memory-layout:
+;
+; (see <http://c64os.com/post/6510procport> for
+;  a full understanding of the processor port bits)
+;
+.MEM_ALL_RAM            = %00110100
+.MEM_IO_ONLY            = %00110101
+.MEM_KERNAL_IO          = %00110110
+.MEM_DEFAULT            = %00110111     ; KERNAL, I/O & BASIC
+
 ; colours:
 ;                         hex   ¦ nybble
 .VIC_BLACK              = $00   ; %0000

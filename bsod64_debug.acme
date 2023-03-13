@@ -5,6 +5,23 @@
 .STR_KEY                = $02   ; a key-identifier string follows
 .STR_KEYPOS             = $03   ; as above, but also with screen co-ords
 
+;;; as above, but tracks the real address
+;;; rather than the "virtual" one
+;;.zp_real                = $05
+;;.zp_real_lo             = $05
+;;.zp_real_hi             = $06
+;;; working copy of the frozen processor status flags
+;;!addr   zp_f            = $fe
+;;; working copy of the frozen registers
+;;!addr   zp_y            = $fd
+;;!addr   zp_x            = $fc
+;;!addr   zp_a            = $fb
+
+
+;;; temporary stack pointer of the frozen stack i.e. a focus cursor, and not the
+;;; origanl stack pointer at time of freeze nor the current system stack pointer
+;;.zp_sp                  = $02
+
 ;;        ; print the "BSOD"
 ;;        ;
 ;;        jsr .bsod_print_str_inline

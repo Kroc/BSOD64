@@ -60,14 +60,6 @@
 ;       pushing it to the stack! returning from a BRK interrupt therefore skips
 ;       over a byte unless this is accounted for!
 ;
-!to     "bsod64.prg"
-
-; if 1, does not include the debugger, only the BSOD screen
-!ifndef BSOD64_BSODONLY         BSOD64_BSODONLY = 1
-
-BSOD64_CODE_ADDR = $7c80        ;sys 31872
-BSOD64_DATA_ADDR = $7000
-
 ; when BSOD64 is invoked, the areas of memory that BSOD64 needs to re-use are
 ; copied to the RAM under the I/O space. since this RAM is very difficult to
 ; use, it's the most likely "unused" RAM on the system and the last area
@@ -106,27 +98,11 @@ BSOD64_DATA_ADDR = $7000
 .frzn_vic               = BSOD64_DATA_ADDR + $c00
 
 ;-------------------------------------------------------------------------------
-;;; working copy of the frozen processor status flags
-;;!addr   zp_f            = $fe
-;;; working copy of the frozen registers
-;;!addr   zp_y            = $fd
-;;!addr   zp_x            = $fc
-;;!addr   zp_a            = $fb
-
-;;; temporary stack pointer of the frozen stack i.e. a focus cursor, and not the
-;;; origanl stack pointer at time of freeze nor the current system stack pointer
-;;.zp_sp                  = $02
-
 ; address pointer used for printing memory values
 ; e.g. display the memory hexdump
 .zp_addr                = $03
 .zp_addr_lo             = $03
 .zp_addr_hi             = $04
-; as above, but tracks the real address
-; rather than the "virtual" one
-.zp_real                = $05
-.zp_real_lo             = $05
-.zp_real_hi             = $06
 
 ;-------------------------------------------------------------------------------
 ; address for string indexing
@@ -152,16 +128,6 @@ BSOD64_DATA_ADDR = $7000
 .STR_HEXW               = $10   ; print the 16-bit value that follows in hex
 .STR_FLAGS              = $06   ; print a binary value as a set of flags
 
-; constants for memory-layout:
-;
-; (see <http://c64os.com/post/6510procport> for
-;  a full understanding of the processor port bits)
-;
-.MEM_ALL_RAM            = %00110100
-.MEM_IO_ONLY            = %00110101
-.MEM_KERNAL_IO          = %00110110
-.MEM_DEFAULT            = %00110111     ; KERNAL, I/O & BASIC
-
 
 ;===============================================================================
 ; 888888b.    .d8888b.   .d88888b.  8888888b.   .d8888b.      d8888
@@ -185,7 +151,7 @@ bsod_basic:                                     ; (`SYS 49152` / `jsr $c000`)
 ; 
 ; if you are using your own interrupt code then you will need to include a
 ; small piece of code at the beginning of your IRQ / NMI routine to invoke
-; BSOD64 -- see the comments for the `bsod_irq` routine below
+; BSOD64
 ;
 ;-------------------------------------------------------------------------------
         jmp .bsod_hook
@@ -264,20 +230,21 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda .stack+6, x         ; read processor flags from interrupt
         sta .frzn_f             ; keep an original copy
 
-        ; make a note if BSOD64 was
-        ; invoked by a BRK instruction
+        ; make a note if BSOD64 was invoked by a BRK instruction:
+        ; this flag is only valid with an interrupt; if BSOD64 is invoked
+        ; by JSR, the BRK flag is *always* set by the PHP instruction
         ;
         and # %00010000         ; isolate the BRK bit
         beq +                   ; use $00 for non-BRK
         lda # $ff               ; use $FF for BRK
-+       sta .bsod_is_brk        ; we can easily refer to this in the future
++       sta .bsod_is_brk        ; (not valid if .bsod_is_jsr is set!)
 
-        ; and lastly extract the program-counter
+        ; and lastly extract the program-counter:
         lda .stack+7, x         ; program counter lo-byte
         sta .frzn_pc_lo         ; store as frozen PC, lo-byte
         lda .stack+8, x         ; program counter hi-byte
         sta .frzn_pc_hi         ; store as frozen PC, hi-byte
-
+        
         ; during an IRQ or NMI, the PC on the stack is that of the next
         ; instruction to be executed. however, the 6502 processor always
         ; auto-increments the program counter during an RTS instruction,
@@ -289,48 +256,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bpl +                   ; skip over if NMI/IRQ/BRK
         inc .frzn_pc_lo         ; add 1 to the PC, lo-byte
         bne +                   ; if no overflow, finished
-        inc .frzn_pc_hi         ; lo overflow, add 1 to PC, hi-byte 
+        inc .frzn_pc_hi         ; lo overflow, add 1 to PC, hi-byte
 +
-;;        ; copy the original program counter to a working copy
-;;        ; and add 1 to show the actual resume point in code
-;;        ; (the 6502 auto-increments the PC upon RTS/RTI)
-;;        ;
-;;        clc
-;;        lda .work_pc_lo
-;;        adc # 1
-;;        sta .frzn_pc_lo
-;;        lda .work_pc_hi
-;;        adc # 0
-;;        sta .frzn_pc_hi
-;;
-;;        ; WARNING: the program counter on the stack will be 'off' by a
-;;        ;          differing amount depending on how BSOD64 was invoked!
-;;        ;
-;;        ; the 6502 processor always auto-increments the program counter when
-;;        ; executing an RTS or RTI instruction, so the address pushed on the
-;;        ; stack is always one-less than the next instruction in the code
-;;        ;
-;;        ; however -- a hardware bug in the BRK instruction causes the 6502
-;;        ; to always add 2 to the program counter pushed to the stack
-;;        ;
-;;        ; note that when invoking BSOD64 by JSR the BRK-bit is always set
-;;        ; due to the use of PHP to push the processor status to the stack
-;;        ; which always sets the BRK-bit
-;;        ;
-;;        bit .bsod_is_jsr        ; invoked by JSR and not an interrupt?
-;;        bmi .bsod_debug         ; if yes, skip over BRK-handling of PC
-;;        bit .bsod_is_brk        ; check the BRK state
-;;        bpl .bsod_debug         ; skip if not a BRK call
-;;
-;;        ; BRK call: fix the program
-;;        ; counter by subtracting 2
-;;        sec
-;;        lda .frzn_pc_lo
-;;        sbc # 2
-;;        sta .frzn_pc_lo
-;;        bcs +
-;;        dec .frzn_pc_hi
-
         ; freeze low-memory:
         ;-----------------------------------------------------------------------
         ; the area we will backup to is under I/O, so before we can write there
@@ -472,7 +399,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         txs
 
         ; TODO: do we need to reset the vectors ($0314-$0333)
-        ;       before enabling the KERNAL?
+        ;       before enabling the KERNAL? (interrupts are off)
         lda # .MEM_KERNAL_IO    ; enable BASIC,
         sta .zp+1               ; KERNAL & I/O
 
@@ -522,6 +449,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #> bsod_irq_nokernal
         sta .cpu_irq_hi
 
+        ; invoked by interrupt: was it BRK?
+;;        bit .bsod_is_brk
+;;        bpl +
+        ; the BRK interrupt incremented the PC by 2, skipping a byte --
+        ; we want to read that byte back as the programmer's BRK code
+        ; (note that A is the PC lo-byte)
++
         ; fallthrough
         ; ...
 
@@ -541,8 +475,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda # .VIC_BLUE
         sta .vic+.VIC_SCREEN_BORDER
         sta .vic+.VIC_SCREEN_BKGRND
-        lda # %00011011         ; 25 rows, screen on
-        sta .vic+.VIC_SCREEN_VERT
+
+        ; this should be handled by SCINIT?
+        ;;lda # %00011011         ; 25 rows, screen on
+        ;;sta .vic+.VIC_SCREEN_VERT
 
         ; enable interrupts and hope
         ; the machine doesn't crash
@@ -563,7 +499,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         cmp # %00000010         ; =%11?
         beq +                   ; VIC bank 1 ($4000-$7FFF)
 
-        ; otherwise, VIC bank 0 ($0000-$3FFFF)
+        ; otherwise, VIC bank 0 ($0000-$3FFF)
         ldx # 0                 ; VIC bank 0 starts on the 0th page
 +       lda # 'V'               ; use consumate "v"s for VIC bank
         sta .bsod_str_banks_vic+0, x
@@ -607,22 +543,23 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ldx #> .bsod_str_mem
         jsr .bsod_print
 
-        ; print frozen zero-page & stack:
+        ; print frozen memory page & stack:
         ;-----------------------------------------------------------------------
-        ; select the page of memory to view (default: $0)
+        ; select the page of memory to view (default: $00)
         lda .frzn_page
-        ; instead of showing the actual page $0-7,
+        ; instead of showing the actual page $00-$07,
         ; show the contents of the frozen version
         cmp # 8
         bcs +
-        adc # >BSOD64_DATA_ADDR ; re-base into the frozen data area
-+       sta @page+2
+        adc # >BSOD64_DATA_ADDR ; re-base address into the frozen data area
++       sta @page+2             ; write into code that reads from address
         
         ; the stack index points to the next *unused* position
         ldy .frzn_sp            ; top stack address
         ldx # 0                 ; starting zero-page address
         jsr .bsod_bsod_zp_cr    ; print first line of zero-page values,
                                 ; and the first stack value
+
 -       txa
         and # %00000001
         beq +
@@ -631,19 +568,17 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 +       lda # .PET_CYAN
         jsr .kernal_chrout
 
-!ifdef  BSOD64_UNDER_IO {
+        sei
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
-}       ; read byte from frozen zero-page
-@page   lda .frzn_zp, x
-        pha
-!ifdef  BSOD64_UNDER_IO {
+@page   lda .frzn_zp, x         ; read byte from frozen memory
+        pha                     ; (put aside before printing)
         lda # .MEM_DEFAULT      ; turn *on* KERNAL,
         sta .zp+1               ;  BASIC, and I/O
-}
+        cli
         pla
         jsr .bsod_print_hex8
-        
+
         inx
         beq +
 
@@ -673,30 +608,31 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sta .screen+(40*24)+39
 
         ; keyloop:
-        ;=======================================================================
+        ;
 .wait_for_key:
+        ;=======================================================================
         jsr .kernal_scnkey      ; why isn't this being done in the std IRQ?
         jsr .kernal_getin
         beq .wait_for_key
         
-        cmp # .PET_CRSR_UP
-        beq @page_prev
-        cmp # .PET_CRSR_LT
-        beq @page_prev
-        cmp # .PET_CRSR_DN
-        beq @page_next
-        cmp # .PET_CRSR_RT
-        beq @page_next
-        cmp # .PET_0
-        bcc +
-        cmp # .PET_9+1
-        bcc @page_jump_09
-+       cmp # .PET_A_LO
-        bcc +
-        cmp # .PET_F_LO+1
-        bcc @page_jump_AF
-+       cmp # .PET_F1
-        bne +
+        cmp # .PET_CRSR_UP      ; cursor-up:
+        beq @page_prev          ; - show previous memory page
+        cmp # .PET_CRSR_LT      ; cursor-left:
+        beq @page_prev          ; - same
+        cmp # .PET_CRSR_DN      ; cursor-down:
+        beq @page_next          ; - show next memory page
+        cmp # .PET_CRSR_RT      ; cursor-right:
+        beq @page_next          ; - same
+        cmp # .PET_0            ; keys 0...
+        bcc +                   ;  through
+        cmp # .PET_9+1          ; 9:
+        bcc @page_jump_09       ; - switch to pages $0x to $9x
++       cmp # .PET_A_LO         ; keys A...
+        bcc +                   ;  through
+        cmp # .PET_F_LO+1       ; F:
+        bcc @page_jump_AF       ; - switch to pages $Ax to $Fx
++       cmp # .PET_F1           ; F1:
+        bne +                   ; - show frozen screen
         jmp @f1
 
 +       jmp .wait_for_key
@@ -744,7 +680,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; BSOD64 uses VIC bank 0 and $0400-$07FF for the screen, but the
         ; frozen program might have been using somewhere else. even if the
         ; program is not using $0400 for the screen, we still restore that
-        ; area just in case it's using it for a custom font!
+        ; area just in case it's using it for character RAM or bitmap screen!
         ;
         ldx # 0
 -       lda .frzn_screen + $000, x
@@ -788,10 +724,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;   dummy interrupt handler, but for stability we disable raster
         ;   interrupts after setting the VIC-II state
         ;
-        ldx # .VIC_COUNT+1
--       lda .frzn_vic-1, x
+        ldx # .VIC_COUNT+1              ; number of VIC-II registers
+-       lda .frzn_vic-1, x              ; read register from the frozen state
         inc .zp+1                       ; enable I/O
-        sta .vic-1,      x
+        sta .vic-1,      x              ; write to hardware I/O
         dec .zp+1                       ; disable I/O
         dex
         bne -
@@ -804,8 +740,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; set memory layout:
         lda # .MEM_DEFAULT
-        sta .zp+1                       ; restore KERNAL, BASIC & I/O
-        cli                             ; re-enable interrupts
+        sta .zp+1               ; restore KERNAL, BASIC & I/O
+        cli                     ; re-enable interrupts
 
         ; PRESS ANY KEY
 -       jsr .kernal_scnkey      ; why isn't this being done in the std IRQ?
@@ -816,7 +752,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 .bsod_bsod_zp_cr:
         ;-----------------------------------------------------------------------
-        ; start the next line of the frozen zero-page dump
+        ; start the next line of the frozen memory dump
         ;
         lda # "$"
         jsr .kernal_chrout
@@ -824,6 +760,18 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jsr .bsod_print_hex8
         lda # ":"
         jmp .kernal_chrout
+
+;;; doesn't preserve X
+;;        stx @addr
+;;        lda #< @str
+;;        ldx #> @str
+;;        jmp .bsod_print
+;;
+;;@str:   !pet    "$"
+;;        !pet    .STR_HEXB
+;;@addr   !byte   $00
+;;        !pet    ":"
+;;        !pet    .STR_END
 
 .bsod_bsod_stack:
         ;-----------------------------------------------------------------------
@@ -925,13 +873,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 .bsod_str_status:
 ;-------------------------------------------------------------------------------
-        !byte   .PET_RETURN, .PET_RVSON
-        !pet    "NMI                           F1:SCREEN"
-        !byte   .PET_RVSOFF
-        !byte   .STR_END
+        !pet    .PET_RETURN, .PET_RVSON
+        !pet    "BSOD64v0.1                    F1:SCREEN"
+        !pet    .PET_RVSOFF
+        !pet    .STR_END
+
 
 --      rts
-
 
 .bsod_print:
 ;===============================================================================
@@ -1135,12 +1083,12 @@ bsod_push:
         pha
         tya                     ; Y
         pha
-        ; set flag to indicate BSOD64 being invoked by JSR
-        ; -- we will have to resume execution differently
+        ; set flag to indicate BSOD64 being invoked by JSR:
+        ; this is important as the program-counter is off-by-one with JSR!
         lda # $ff
         sta .bsod_is_jsr
 
-        ; now begin the freeze
+        ; now begin the freeze:
         ; we will never be returning from this!
         jsr .bsod_freeze
 
@@ -1279,8 +1227,4 @@ bsod_push:
 
 .frzn_cia2:     ; CIA #2 port A (contains VIC bank)
         !byte   .NULL_VALUE
-
-
-!if BSOD64_BSODONLY = 0 {
-!source "bsod64_debug.acme"
-}}
+}
