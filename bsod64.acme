@@ -516,10 +516,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; otherwise, VIC bank 0 ($0000-$3FFF)
         ldx # 0                 ; VIC bank 0 starts on the 0th page
 +       lda # 'V'               ; use consumate "v"s for VIC bank
-        sta .bsod_str_banks_vic+0, x
-        sta .bsod_str_banks_vic+1, x
-        sta .bsod_str_banks_vic+2, x
-        sta .bsod_str_banks_vic+3, x
+        sta .str_banks_vic+0, x
+        sta .str_banks_vic+1, x
+        sta .str_banks_vic+2, x
+        sta .str_banks_vic+3, x
 
         ; ROM banks:
         lda .frzn_cpu_port
@@ -530,25 +530,25 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; that the I/O shield is on
         ;
         ldy # 'I'               ; use an "i" in bank $D to indicate I/O on
-        sty .bsod_str_banks_i
+        sty .str_banks_i
 
         sec
         sbc # 1
         beq +
 
         ldy # 'K'               ; use a "k" in banks $E & $F for KERNAL on
-        sty .bsod_str_banks_k+0
-        sty .bsod_str_banks_k+1
+        sty .str_banks_k+0
+        sty .str_banks_k+1
 
         sbc # 1
         beq +
 
         ldy # 'B'               ; use a "b" in banks $A & $B for BASIC on
-        sty .bsod_str_banks_b+0
-        sty .bsod_str_banks_b+1
+        sty .str_banks_b+0
+        sty .str_banks_b+1
 
-+       lda #< .bsod_str_top
-        ldx #> .bsod_str_top
++       lda #< .str_top
+        ldx #> .str_top
         jsr .bsod_print
 
         ; print frozen stack:
@@ -565,8 +565,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; print bottom status bar:
         ;-----------------------------------------------------------------------
-+       lda #< .bsod_str_status
-        ldx #> .bsod_str_status
++       lda #< .str_status
+        ldx #> .str_status
         jsr .bsod_print
 
         ; we can't print the bottom-rightmost character on the screen
@@ -580,8 +580,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 .bsod_BSOD_refresh:
         ;=======================================================================
-        lda #< .bsod_str_mem
-        ldx #> .bsod_str_mem
+        lda #< .str_mem
+        ldx #> .str_mem
         jsr .bsod_print
 
         ; print frozen memory page:
@@ -752,7 +752,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jmp .bsod_BSOD
 
 
-.bsod_str_top:
+.str_top:
 ;-------------------------------------------------------------------------------
         !pet    .PET_WHITE, .PET_CLR, .PET_LCASE, .PET_CASEOFF
         !pet    .PET_RVSON, "PC:   A: X: Y: NV-BDIZC 0123456789ABCDEF"
@@ -785,26 +785,26 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !byte   %00000000
         !pet    " "
 
-.bsod_str_banks:
+.str_banks:
         ;-----------------------------------------------------------------------
-.bsod_str_banks_vic:
-.bsod_str_banks_vic0:           ; VIC-bank 0 ($0000-$3FFF)
+.str_banks_vic:
+.str_banks_vic0:                ; VIC-bank 0 ($0000-$3FFF)
         !pet    "...."          ; zeropage, stack, work RAM
-.bsod_str_banks_vic1:           ; VIC-bank 1 ($4000-$7FFF)
+.str_banks_vic1:                ; VIC-bank 1 ($4000-$7FFF)
         !pet    "...."
-.bsod_str_banks_vic2:           ; VIC-bank 2 ($8000-$BFFF)
+.str_banks_vic2:                ; VIC-bank 2 ($8000-$BFFF)
         !pet    ".."            ; cart ROM LO ($8000-$9FFF)
-.bsod_str_banks_b:
+.str_banks_b:
         !pet    ".."            ; BASIC ROM ($A000-$BFFF)
-.bsod_str_banks_vic3:           ; VIC-bank 3 ($C000-$FFFF)
+.str_banks_vic3:                ; VIC-bank 3 ($C000-$FFFF)
         !pet    "."             ; $C000 is always RAM
-.bsod_str_banks_i:
+.str_banks_i:
         !pet    "."             ; I/O ($D000-$DFFF)
-.bsod_str_banks_k:
+.str_banks_k:
         !pet    ".."            ; KERNAL ROM ($E000-$FFFF)
         !pet    .PET_RETURN
 
-.bsod_str_stack:
+.str_stack:
 ;-------------------------------------------------------------------------------
         !pet    "SP:$"
         !byte   .STR_HEXB
@@ -813,7 +813,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    " ", $5f
         !byte   .STR_END
 
-.bsod_str_status:
+.str_status:
 ;-------------------------------------------------------------------------------
         !byte   .STR_POS, 24, 0
         !pet    .PET_RVSON, .PET_WHITE
@@ -823,7 +823,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    .PET_RVSOFF
         !byte   .STR_END
 
-.bsod_str_mem:
+.str_mem:
         ;-----------------------------------------------------------------------
         !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
