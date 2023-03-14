@@ -170,8 +170,10 @@ bsod_jsr:                                       ; (`SYS 49155` / `jsr $c003`)
 ;-------------------------------------------------------------------------------
         ; push the processor status and registers to the stack
         ; to normalise the stack layout for BSOD64
-        jmp bsod_push
+        jsr .bsod_push
 
+        ; fallthrough
+        ; ...
 
 bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;===============================================================================
@@ -194,11 +196,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; processor state to the stack we can recover the original
         ; interrupt state from there 
         sei
-        ; set the flag indicating how BSOD64 was launched
-        ; in this case, by IRQ (the default), not manually;
-        ; the BRK bit will be checked later
-        lda # $00
-        sta .bsod_is_jsr
 
         ; fallthrough
         ; ...
@@ -208,26 +205,33 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ; freeze the state of the machine:
 ; (NEVER CALL THIS DIRECTLY -- *ALWAYS* use `bsod_jsr` or `bsod_irq` above)
 ;
+; because invoking BSOD64 requires some stack use (see above), we will
+; consume the stack bytes used by BSOD64 so that the frozen stack pointer
+; represents the stack level at the point of the NMI/BRK/JSR to BSOD64
+;
 ;-------------------------------------------------------------------------------
         ; we do not know if decimal mode was in use, turn it off before
         ; we do any math (this is a hardware-flaw with the NMOS 6502)
         cld
-        tsx                     ; get the stack pointer
-        stx .frzn_sp            ; keep an original copy
+
+        pla                     ; consume the JSR address
+        pla                     ;  to this routine (not used)
+
         ; backup the registers that were pushed on to the stack by the
-        ; IRQ/NMI routine (or BSOD64 iteself in the case of `bsod_jsr`)
-        lda .stack+3, x         ; 1st register on stack
+        ; IRQ/NMI routine (or BSOD64 itself in the case of `bsod_jsr`)
+        pla                     ; 1st register on stack
         sta .frzn_y             ; keep an original copy of Y
-        lda .stack+4, x         ; 2nd register on stack
+        pla                     ; 2nd register on stack
         sta .frzn_x             ; keep an original copy of X
-        lda .stack+5, x         ; 3rd register on stack
+        pla                     ; 3rd register on stack
         sta .frzn_a             ; keep an original copy of A
 
         ; below the registers should be the processor status at the time of
         ; interrupt. we will need this to determine if BSOD64 was invoked by
-        ; a BRK instruction
+        ; a BRK instruction. if JSR is used, the flags will have been pushed
+        ; manually by a PHP instruction in `.bsod_push`
         ;
-        lda .stack+6, x         ; read processor flags from interrupt
+        pla                     ; read processor flags from interrupt
         sta .frzn_f             ; keep an original copy
 
         ; make a note if BSOD64 was invoked by a BRK instruction:
@@ -240,9 +244,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 +       sta .bsod_is_brk        ; (not valid if .bsod_is_jsr is set!)
 
         ; and lastly extract the program-counter:
-        lda .stack+7, x         ; program counter lo-byte
+        ;
+        pla                     ; program counter lo-byte
         sta .frzn_pc_lo         ; store as frozen PC, lo-byte
-        lda .stack+8, x         ; program counter hi-byte
+        pla                     ; program counter hi-byte
         sta .frzn_pc_hi         ; store as frozen PC, hi-byte
         
         ; during an IRQ or NMI, the PC on the stack is that of the next
@@ -257,7 +262,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         inc .frzn_pc_lo         ; add 1 to the PC, lo-byte
         bne +                   ; if no overflow, finished
         inc .frzn_pc_hi         ; lo overflow, add 1 to PC, hi-byte
-+
+
++       tsx                     ; get the stack pointer
+        stx .frzn_sp            ; keep an original copy
+
         ; freeze low-memory:
         ;-----------------------------------------------------------------------
         ; the area we will backup to is under I/O, so before we can write there
@@ -281,7 +289,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         lda # .MEM_ALL_RAM      ; disable I/O & ROM!
         sta .zp+1               ; all RAM is visible
-        
+
         ; backup the low eight pages of memory:
         ;
         ldx # 0
@@ -314,11 +322,11 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne -
 
         lda .frzn_cpu_ddir      ; take the original data-direction value
-        sta .frzn_zp+0          ; and put into the frozen zero-page
-        lda .frzn_cpu_port      ; and do the same with the CPU port value
+        sta .frzn_zp+0          ;  and put into the frozen zero-page
+        lda .frzn_cpu_port      ;  and do the same with the CPU port value
         sta .frzn_zp+1
 
-        ; with KERNAL off, we can back up the hardware vectors underneath:
+        ; with KERNAL off, we can backup the hardware vectors underneath:
         ; the non-maskable interrupt, wired to the RESTORE key & CIA2
         lda .cpu_nmi_lo
         sta .frzn_nmi_lo
@@ -423,14 +431,16 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
         jsr .kernal_restor      ; (does not enable interrupts)
 
-        ; put handlers in place for interrupts whenever we turn off the KERNAL
+        ; put handlers in place for interrupts
+        ; for whenever we turn off the KERNAL:
         ;
-        ; install the NMI handler
+        ; install the NMI handler:
+        ; (KERNAL vectored NMI handler)
         lda #< bsod_nmi_kernalon
         sta .vectors+.VECTOR_NMI+0
         lda #> bsod_nmi_kernalon
         sta .vectors+.VECTOR_NMI+1
-
+        ; (CPU vectored NMI handler)
         lda #< bsod_nmi_nokernal
         sta .cpu_nmi_lo
         lda #> bsod_nmi_nokernal
@@ -668,12 +678,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; F1: restore original screen:
         ;=======================================================================
-        ; this is incomplete because it assumes a text screen in VIC bank 0
-        ; and makes no effort to restore sprites, screen scroll etc.
-        ;
 @f1:    sei                     ; disable interrupts whilst we mess with memory
-        lda # .MEM_ALL_RAM
-        sta .zp+1
+        lda # .MEM_ALL_RAM      ; disable I/O shield and ROM
+        sta .zp+1               ;   to access data backup
 
         ; restore pages 4-7 & colour RAM:
         ;
@@ -1024,7 +1031,7 @@ bsod_irq_kernalon:
 
 bsod_irq_nokernal:
         ;-----------------------------------------------------------------------
-        ; acknowledge the interrupt
+        ; acknowledge the interrupt (we must R/M/W the register)
         asl .cia1 + .CIA_IRQ
         
         ; return from interrupt
@@ -1046,7 +1053,7 @@ bsod_nmi_kernalon:
         rti
 
 
-bsod_push:
+.bsod_push:
 ;===============================================================================
 ; normalise the stack to appear the same as the interrupt call would:
 ; this reduces the complexity of handling the different methods
@@ -1085,12 +1092,10 @@ bsod_push:
         pha
         ; set flag to indicate BSOD64 being invoked by JSR:
         ; this is important as the program-counter is off-by-one with JSR!
-        lda # $ff
-        sta .bsod_is_jsr
+        sec                     ; set carry,
+        ror .bsod_is_jsr        ;  and shift into bit 7 of flag
 
-        ; now begin the freeze:
-        ; we will never be returning from this!
-        jsr .bsod_freeze
+        rts                     ; return to begin the normal freezing process
 
 
 .bsod_print_hex16:
@@ -1192,10 +1197,10 @@ bsod_push:
 ; depending on how BSDO64 is invoked, different actions
 ; must be taken during the freeze and defrost
 ;
-.bsod_is_jsr:   ; BSOD64 invoked by JSR? $00 = no, $FF = yes
-        !byte   .NULL_VALUE
+.bsod_is_jsr:   ; BSOD64 invoked by JSR? $00 = no, $80 (bit7) = yes
+        !byte   $00
 .bsod_is_brk:   ; BRK interrupt flag: $00 = no, $FF = yes
-        !byte   .NULL_VALUE
+        !byte   $00
 
 ; these values have to be stored within the code space because they have to be
 ; backed up early, before the I/O shield is turned if the BSDO64 code can run
