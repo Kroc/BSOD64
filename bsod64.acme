@@ -131,11 +131,11 @@
 ; terminators used for the string-printing routines:
 ;
 .STR_END                = $00   ; standard terminator
-.STR_POS                = $01   ; change cursor pos; row & col bytes follow
-.STR_REPT               = $04   ; repeat a character
-.STR_HEXB               = $0f   ; print the 8-bit value that follows in hex
-.STR_HEXW               = $10   ; print the 16-bit value that follows in hex
-.STR_FLAGS              = $06   ; print a binary value as a set of flags
+.STR_POS                = $f0   ; change cursor pos; row & col bytes follow
+.STR_REPT               = $f1   ; repeat a character
+.STR_HEXW               = $f2   ; print the 16-bit value that follows in hex
+.STR_HEXB               = $f3   ; print the 8-bit value that follows in hex
+.STR_FLAGS              = $f4   ; print a binary value as a set of flags
 
 
 ;===============================================================================
@@ -865,29 +865,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         beq +
         dex
         bne @colour
-+       rts
-
-
-;;.bsod_print_this:
-;;;=============================================================================
-;;        tsx                     ; retrieve current stack position
-;;        lda .stack+1, x
-;;        sta .zp_str_lo
-;;        lda .stack+2, x
-;;        sta .zp_str_hi
-;;        ldy # 1
-;;        bne @loop               ; jump into the loop
-;;
-;;        ;---------------------------------------------------------------------
-;;+       clc
-;;        tsx                     ; retrieve current stack position
-;;        tya
-;;        adc .stack+1, x
-;;        sta .stack+1, x
-;;        bcc +
-;;        inc .stack+2, x
-;;+       rts
-
++
 --      rts
 
 .bsod_print:
@@ -906,8 +884,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 @loop:  iny                     ; move to next character
         lda (.zp_str), y        ; read character from string
         beq --                  ; = .STR_END? -- stop printing
-        cmp # $20               ; values $00-$1F are control codes
-        bcc -                   ; handle custom control code?
+        cmp # $f0               ; values $F0-$FF are control codes
+        bcs -                   ; handle custom control code?
 
         ; not a control code:
         jsr .kernal_chrout      ; print the character
@@ -917,7 +895,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
         ; .STR_POS : set cursor location
         ;-----------------------------------------------------------------------
-@cc:    cmp # .STR_POS          ; =.STR_POS? -- set cursor position
+@cc:    sbc # $f0               ; count control codes as $00..$0F
+        tax                     ; =.STR_POS? -- set cursor position
         bne +
 
         iny                     ; (move to next byte in string)
@@ -936,7 +915,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; .STR_REPT : repeat a character
         ;-----------------------------------------------------------------------
-+       cmp # .STR_REPT         ; =.STR_REPT? -- repeat a character
++       dex                     ; =.STR_REPT? -- repeat a character
         bne +
 
         iny                     ; (move to next byte in string)
@@ -951,7 +930,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; .STR_HEXW : print 16-bit hexadecimal value
         ;-----------------------------------------------------------------------
-+       cmp # .STR_HEXW         ; =.STR_HEXW? -- print 16-bit hexadecimal value
++       dex                     ; =.STR_HEXW? -- print 16-bit hexadecimal value
         bne +
 
         iny                     ; (move to next byte in string)
@@ -963,7 +942,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; .STR_HEXB : print 8-bit hexadecimal value
         ;-----------------------------------------------------------------------
-+       cmp # .STR_HEXB         ; =.STR_HEXB? -- print 8-bit hexadecimal value
++       dex                     ; =.STR_HEXB? -- print 8-bit hexadecimal value
         bne +
 
         iny                     ; (move to next byte in string)
@@ -972,7 +951,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; .STR_FLAGS : print 8-bit binary value as flags
         ;-----------------------------------------------------------------------
-+       cmp # .STR_FLAGS        ; =.STR_FLAGS?
++       dex                     ; =.STR_FLAGS?
         bne +
 
         iny                     ; (move to next byte in string)
@@ -981,7 +960,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jmp .bsod_print_bin8
 
         ;-----------------------------------------------------------------------
-+       jmp .kernal_chrout      ; handle standard PETSCII control codes
++       rts
 
 
 .bsod_hook:
@@ -1066,7 +1045,7 @@ bsod_irq_nokernal:
         ;-----------------------------------------------------------------------
         ; acknowledge the interrupt (we must R/M/W the register)
         asl .cia1 + .CIA_IRQ
-        
+
         ; return from interrupt
         ; (restore processor flags, enable interrupts)
         rti
@@ -1167,9 +1146,9 @@ bsod_nmi_kernalon:
         and # %00001111         ; extract lower nybble
         cmp # 9+1
         adc # $30               ; rebase to PETSCII '0' and above
-        
+
         cld                     ; disable decimal mode
-        
+
         ; print the last digit
         ; (X & Y are preserved)
         jmp .kernal_chrout
@@ -1216,11 +1195,11 @@ bsod_nmi_kernalon:
         +bit_skip2              ; `bit $....` (skip next 2-byte instruction)
 +       lda # $2d               ; PETSCII '-'
         jsr .kernal_chrout
-        
+
         txa                     ; retrieve remaining value before looping
         asl @count              ; shift counter along
         bne @sym                ; keep looping until the bit falls off
-        
+
         rol @count              ; (put the bit back on the end)
         rts
 
