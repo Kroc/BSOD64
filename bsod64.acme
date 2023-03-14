@@ -100,14 +100,10 @@
 .frzn_nmi               = BSOD64_DATA_ADDR + $c40
 .frzn_nmi_lo            = BSOD64_DATA_ADDR + $c40
 .frzn_nmi_hi            = BSOD64_DATA_ADDR + $c41
-                        ; backup of RESET vector at $FFFC
-.frzn_rst               = BSOD64_DATA_ADDR + $c42
-.frzn_rst_lo            = BSOD64_DATA_ADDR + $c42
-.frzn_rst_hi            = BSOD64_DATA_ADDR + $c43
                         ; backup of IRQ vector at $FFFE
-.frzn_irq               = BSOD64_DATA_ADDR + $c44
-.frzn_irq_lo            = BSOD64_DATA_ADDR + $c44
-.frzn_irq_hi            = BSOD64_DATA_ADDR + $c45
+.frzn_irq               = BSOD64_DATA_ADDR + $c42
+.frzn_irq_lo            = BSOD64_DATA_ADDR + $c42
+.frzn_irq_hi            = BSOD64_DATA_ADDR + $c43
 
 ;-------------------------------------------------------------------------------
 ; address pointer used for printing memory values
@@ -345,12 +341,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sta .frzn_nmi_lo
         lda .cpu_nmi_hi
         sta .frzn_nmi_hi
-        ; whilst the reset vector is never used after power-on,
-        ; the host program may have modified it for its own uses
-        lda .cpu_rst_lo
-        sta .frzn_rst_lo
-        lda .cpu_rst_hi
-        sta .frzn_rst_hi
         ; the interrupt request vector, wired to CIA1 and VIC-II
         lda .cpu_irq_lo
         sta .frzn_irq_lo
@@ -459,14 +449,15 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #> bsod_nmi_nokernal
         sta .cpu_nmi_hi
 
-        ; install the IRQ handler
+        ; install the IRQ handler:
+        ; (KERNAL vectored IRQ handler)
         lda #< bsod_irq_kernalon
         sta .vectors+.VECTOR_IRQ+0
         sta .vectors+.VECTOR_BRK+0
         lda #> bsod_irq_kernalon
         sta .vectors+.VECTOR_IRQ+1
         sta .vectors+.VECTOR_BRK+1
-
+        ; (CPU vectored IRQ handler)
         lda #< bsod_irq_nokernal
         sta .cpu_irq_lo
         lda #> bsod_irq_nokernal
@@ -862,7 +853,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sei
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
-.get_addr:
         lda (.zp_addr), y       ; read byte from frozen memory
         pha                     ; (put aside before printing)
         lda # .MEM_DEFAULT      ; turn *on* KERNAL,
@@ -958,7 +948,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         dex
         bne -
         rts
-        
+
         ; .STR_HEXW : print 16-bit hexadecimal value
         ;-----------------------------------------------------------------------
 +       cmp # .STR_HEXW         ; =.STR_HEXW? -- print 16-bit hexadecimal value
@@ -989,21 +979,36 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda (.zp_str), y        ; read value to print
         sec
         jmp .bsod_print_bin8
-        
+
         ;-----------------------------------------------------------------------
 +       jmp .kernal_chrout      ; handle standard PETSCII control codes
 
 
 .bsod_hook:
 ;===============================================================================
-;
+; install hooks for BSOD64 to trap execution:
 ;-------------------------------------------------------------------------------
         sei                     ; disable interrupts whilst we alter them...
-        
+
+        lda # .MEM_ALL_RAM      ; turn *off* BASIC,
+        sta .zp+1               ;  KERNAL, and I/O
+
+        ; hook the NMI, i.e. the RESTORE key
         lda #< .bsod_hook_nmi
         sta .vectors + .VECTOR_NMI+.lo
+        sta .cpu_nmi_lo
         lda #> .bsod_hook_nmi
         sta .vectors + .VECTOR_NMI+.hi
+        sta .cpu_nmi_hi
+
+;;        ; TODO: the IRQ handler has to check for the BRK bit
+;;        lda #< bsod_irq_nokernal
+;;        sta .cpu_irq_lo
+;;        lda #> bsod_irq_nokernal
+;;        sta .cpu_irq_hi
+
+        lda # .MEM_DEFAULT      ; turn *on* KERNAL,
+        sta .zp+1               ;  BASIC, and I/O
 
         cli                     ; re-enable interrupts
         rts
