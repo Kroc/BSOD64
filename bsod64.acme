@@ -96,6 +96,18 @@
 .frzn_color             = BSOD64_DATA_ADDR + $800
                         ; backup of VIC-II registers (46-bytes)
 .frzn_vic               = BSOD64_DATA_ADDR + $c00
+                        ; backup of NMI vector at $FFFA
+.frzn_nmi               = BSOD64_DATA_ADDR + $c40
+.frzn_nmi_lo            = BSOD64_DATA_ADDR + $c40
+.frzn_nmi_hi            = BSOD64_DATA_ADDR + $c41
+                        ; backup of RESET vector at $FFFC
+.frzn_rst               = BSOD64_DATA_ADDR + $c42
+.frzn_rst_lo            = BSOD64_DATA_ADDR + $c42
+.frzn_rst_hi            = BSOD64_DATA_ADDR + $c43
+                        ; backup of IRQ vector at $FFFE
+.frzn_irq               = BSOD64_DATA_ADDR + $c44
+.frzn_irq_lo            = BSOD64_DATA_ADDR + $c44
+.frzn_irq_hi            = BSOD64_DATA_ADDR + $c45
 
 ;-------------------------------------------------------------------------------
 ; address pointer used for printing memory values
@@ -124,6 +136,7 @@
 ;
 .STR_END                = $00   ; standard terminator
 .STR_POS                = $01   ; change cursor pos; row & col bytes follow
+.STR_REPT               = $04   ; repeat a character
 .STR_HEXB               = $0f   ; print the 8-bit value that follows in hex
 .STR_HEXW               = $10   ; print the 16-bit value that follows in hex
 .STR_FLAGS              = $06   ; print a binary value as a set of flags
@@ -459,13 +472,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #> bsod_irq_nokernal
         sta .cpu_irq_hi
 
-        ; invoked by interrupt: was it BRK?
+;;        ; invoked by interrupt: was it BRK?
 ;;        bit .bsod_is_brk
 ;;        bpl +
-        ; the BRK interrupt incremented the PC by 2, skipping a byte --
-        ; we want to read that byte back as the programmer's BRK code
-        ; (note that A is the PC lo-byte)
-+
+;;        ; the BRK interrupt incremented the PC by 2, skipping a byte --
+;;        ; we want to read that byte back as the programmer's BRK code
+;;        ; (note that A is the PC lo-byte)
+;;+
         ; fallthrough
         ; ...
 
@@ -547,13 +560,40 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ldx #> .bsod_str_top
         jsr .bsod_print
 
+        ; print frozen stack:
+        ;-----------------------------------------------------------------------
+        ldy .frzn_sp
+        iny
+        beq +
+
+        lda #< .frzn_stack
+        sta .zp_addr_lo
+        lda #> .frzn_stack
+        sta .zp_addr_hi
+        jsr .bsod_pop16
+
+        ; print bottom status bar:
+        ;-----------------------------------------------------------------------
++       lda #< .bsod_str_status
+        ldx #> .bsod_str_status
+        jsr .bsod_print
+
+        ; we can't print the bottom-rightmost character on the screen
+        ; or it'll scroll, so we POKE it in manually
+        ;
+        lda # ' '+$80           ; (screen code for reverse space)
+        sta .screen+(40*24)+39
+
+        ; fallthrough
+        ; ...
+
 .bsod_BSOD_refresh:
         ;=======================================================================
         lda #< .bsod_str_mem
         ldx #> .bsod_str_mem
         jsr .bsod_print
 
-        ; print frozen memory page & stack:
+        ; print frozen memory page:
         ;-----------------------------------------------------------------------
         ; select the page of memory to view (default: $00)
         lda .frzn_page
@@ -562,60 +602,24 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         cmp # 8
         bcs +
         adc # >BSOD64_DATA_ADDR ; re-base address into the frozen data area
-+       sta @page+2             ; write into code that reads from address
-        
-        ; the stack index points to the next *unused* position
-        ldy .frzn_sp            ; top stack address
-        ldx # 0                 ; starting zero-page address
-        jsr .bsod_bsod_zp_cr    ; print first line of zero-page values,
-                                ; and the first stack value
++       sta .zp_addr_hi         ; write into code that reads from address
+        ldy # $00               ; Y will be byte counter
+        sty .zp_addr_lo         ;  and starting address lo-byte
 
--       txa
-        and # %00000001
-        beq +
-        lda # .PET_WHITE
-        +bit_skip2
-+       lda # .PET_CYAN
+--      lda # "$"
+        jsr .kernal_chrout
+        tya
+        jsr .bsod_print_hex8
+        lda # ":"
         jsr .kernal_chrout
 
-        sei
-        lda # .MEM_ALL_RAM      ; turn *off* BASIC,
-        sta .zp+1               ;  KERNAL, and I/O
-@page   lda .frzn_zp, x         ; read byte from frozen memory
-        pha                     ; (put aside before printing)
-        lda # .MEM_DEFAULT      ; turn *on* KERNAL,
-        sta .zp+1               ;  BASIC, and I/O
-        cli
-        pla
-        jsr .bsod_print_hex8
+        jsr .bsod_pop16
 
-        inx
-        beq +
+        lda # .PET_RETURN
+        jsr .kernal_chrout
 
-        txa
-        and # %00001111
-        bne -
-
-        ; print the stack value:
-        jsr .bsod_bsod_stack
-
-        ; start the next zero-page line:
-        jsr .bsod_bsod_zp_cr
-        jmp -
-
-        ; print the stack value:
-+       jsr .bsod_bsod_stack
-
-        ; print the bottom status bar
-        ;-----------------------------------------------------------------------
-        lda #< .bsod_str_status
-        ldx #> .bsod_str_status
-        jsr .bsod_print
-        ; we can't print the bottom-rightmost character on the screen
-        ; or it'll scroll, so we POKE it in manually
-        ;
-        lda # $a0               ; (screen code for reverse space)
-        sta .screen+(40*24)+39
+        tya
+        bne --
 
         ; keyloop:
         ;
@@ -757,58 +761,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jmp .bsod_BSOD
 
 
-.bsod_bsod_zp_cr:
-        ;-----------------------------------------------------------------------
-        ; start the next line of the frozen memory dump
-        ;
-        lda # "$"
-        jsr .kernal_chrout
-        txa
-        jsr .bsod_print_hex8
-        lda # ":"
-        jmp .kernal_chrout
-
-;;; doesn't preserve X
-;;        stx @addr
-;;        lda #< @str
-;;        ldx #> @str
-;;        jmp .bsod_print
-;;
-;;@str:   !pet    "$"
-;;        !pet    .STR_HEXB
-;;@addr   !byte   $00
-;;        !pet    ":"
-;;        !pet    .STR_END
-
-.bsod_bsod_stack:
-        ;-----------------------------------------------------------------------
-        ; print a value from the frozen stack
-        ;
-        iny
-        beq +
-
-        lda # " "
-        jsr .kernal_chrout
-        lda # " "
-        jsr .kernal_chrout
-!ifdef  BSOD64_UNDER_IO {
-        lda # .MEM_ALL_RAM      ; turn *off* BASIC,
-        sta .zp+1               ;  KERNAL, and I/O
-}       ; read byte from frozen stack
-        lda .frzn_stack, y
-        pha
-!ifdef  BSOD64_UNDER_IO {
-        lda # .MEM_DEFAULT      ; turn *on* KERNAL,
-        sta .zp+1               ;  BASIC, and I/O
-}
-        pla
-        jmp .bsod_print_hex8
-
-+       dey
-        lda # .PET_RETURN
-        jmp .kernal_chrout
-
-
 .bsod_str_top:
 ;-------------------------------------------------------------------------------
         !pet    .PET_WHITE, .PET_CLR, .PET_LCASE, .PET_CASEOFF
@@ -818,26 +770,26 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; have to be backed up early, before the I/O shield is turned off.
         ; if BSDO64 can run at all then, logically, these addresses are
         ; accessible
-        !pet    .STR_HEXW
+        !byte   .STR_HEXW
 .frzn_pc:
 .frzn_pc_lo:
         !byte   $00
 .frzn_pc_hi:
         !byte   $00
         !pet    " "
-        !pet    .STR_HEXB
+        !byte   .STR_HEXB
 .frzn_a:
         !byte   $00
         !pet    " "
-        !pet    .STR_HEXB
+        !byte   .STR_HEXB
 .frzn_x:
         !byte   $00
         !pet    " "
-        !pet    .STR_HEXB
+        !byte   .STR_HEXB
 .frzn_y:
         !byte   $00
         !pet    " "
-        !pet    .STR_FLAGS
+        !byte   .STR_FLAGS
 .frzn_f:
         !byte   %00000000
         !pet    " "
@@ -859,32 +811,92 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         !pet    "."             ; I/O ($D000-$DFFF)
 .bsod_str_banks_k:
         !pet    ".."            ; KERNAL ROM ($E000-$FFFF)
-        !pet    .STR_END
+        !pet    .PET_RETURN
+
+.bsod_str_stack:
+;-------------------------------------------------------------------------------
+        !pet    "SP:$"
+        !byte   .STR_HEXB
+.frzn_sp:
+        !byte   $00
+        !pet    " ", $5f
+        !byte   .STR_END
+
+.bsod_str_status:
+;-------------------------------------------------------------------------------
+        !byte   .STR_POS, 24, 0
+        !pet    .PET_RVSON, .PET_WHITE
+        !pet    "BSOD64v0.1"
+        !pet    .STR_REPT, 20, " "
+        !pet    "F1:SCREEN"
+        !pet    .PET_RVSOFF
+        !byte   .STR_END
 
 .bsod_str_mem:
         ;-----------------------------------------------------------------------
         !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
         !pet    "$"
-        !pet    .STR_HEXB
+        !byte   .STR_HEXB
 .frzn_page:
         !byte   $00
-        !pet    "xx <CRSR>                   stack:$"
-        !pet    .STR_HEXB
-.frzn_sp:
-        !byte   $00
+        !pet    "xx <CRSR>"
+        !pet    .STR_REPT, 28, " "
         !pet    .PET_RVSOFF, .PET_LTBLUE
         !pet    "    -0-1-2-3-4-5-6-7-8-9-A-B-C-D-E-F"
         !pet    .PET_WHITE, .PET_RETURN
-        !pet    .STR_END
+        !byte   .STR_END
 
-.bsod_str_status:
-;-------------------------------------------------------------------------------
-        !pet    .PET_RETURN, .PET_RVSON
-        !pet    "BSOD64v0.1                    F1:SCREEN"
-        !pet    .PET_RVSOFF
-        !pet    .STR_END
 
+.bsod_pop16:
+;===============================================================================
+        ldx # 16
+        lda # .PET_CYAN
+        bne +
+
+@colour:lda # .PET_CYAN
++       jsr .kernal_chrout
+        eor # (.PET_WHITE xor .PET_CYAN)
+        sta @colour+1
+
+        sei
+        lda # .MEM_ALL_RAM      ; turn *off* BASIC,
+        sta .zp+1               ;  KERNAL, and I/O
+.get_addr:
+        lda (.zp_addr), y       ; read byte from frozen memory
+        pha                     ; (put aside before printing)
+        lda # .MEM_DEFAULT      ; turn *on* KERNAL,
+        sta .zp+1               ;  BASIC, and I/O
+        cli
+        pla
+        jsr .bsod_print_hex8
+
+        iny                     ; move to next byte
+        beq +
+        dex
+        bne @colour
++       rts
+
+
+;;.bsod_print_this:
+;;;=============================================================================
+;;        tsx                     ; retrieve current stack position
+;;        lda .stack+1, x
+;;        sta .zp_str_lo
+;;        lda .stack+2, x
+;;        sta .zp_str_hi
+;;        ldy # 1
+;;        bne @loop               ; jump into the loop
+;;
+;;        ;---------------------------------------------------------------------
+;;+       clc
+;;        tsx                     ; retrieve current stack position
+;;        tya
+;;        adc .stack+1, x
+;;        sta .stack+1, x
+;;        bcc +
+;;        inc .stack+2, x
+;;+       rts
 
 --      rts
 
@@ -922,14 +934,31 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda (.zp_str), y        ; read cursor row
         tax                     ; use X for KERNAL call
         iny                     ; (move to next byte in string)
+        tya                     ; (backup Y before KERNAL call)
+        pha                     ;
         lda (.zp_str), y        ; read cursor column
-        sty @y+1                ; (backup Y before KERNAL call)
         tay                     ; move cursor col to Y-register
         clc                     ; = set cursor
         jsr .kernal_plot        ; call KERNAL to position cursor
-@y      ldy # .NULL_VALUE       ; restore string index
+        pla                     ; restore string index
+        tay                     ;
         rts
 
+        ; .STR_REPT : repeat a character
+        ;-----------------------------------------------------------------------
++       cmp # .STR_REPT         ; =.STR_REPT? -- repeat a character
+        bne +
+
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read repeat count
+        tax                     ; use X for counter
+        iny                     ; (move to next byte in string)
+        lda (.zp_str), y        ; read character
+-       jsr .kernal_chrout      ; print character
+        dex
+        bne -
+        rts
+        
         ; .STR_HEXW : print 16-bit hexadecimal value
         ;-----------------------------------------------------------------------
 +       cmp # .STR_HEXW         ; =.STR_HEXW? -- print 16-bit hexadecimal value
@@ -962,7 +991,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         jmp .bsod_print_bin8
         
         ;-----------------------------------------------------------------------
-+       jmp .kernal_chrout      ; handle the PETSCII control code
++       jmp .kernal_chrout      ; handle standard PETSCII control codes
 
 
 .bsod_hook:
@@ -998,7 +1027,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;;        ; return from interrupt
 ;;        ; (restore processor flags, enable interrupts)
 ;;        rti
-
 
 ;===============================================================================
 ; interrupt handlers:
@@ -1156,22 +1184,22 @@ bsod_nmi_kernalon:
 ;-------------------------------------------------------------------------------
         ; check the carry state. if carry is set binary
         ; digits will be printed as "-" = 0 and "*" = 1
-        bcs @sym                ; carry set = use symbols
-
-        ; print "0" & "1" digits
-        ;-----------------------------------------------------------------------
-@dig:   asl                     ; pop a bit off the value
-        tax                     ; remember remainder for next loop
-        lda # $30               ; PETSCII '0'
-        adc # 0                 ; PETSCII '1' if bit was 1
-        jsr .kernal_chrout      ; print digit
-
-        txa                     ; retrieve remaining value before looping
-        asl @count              ; shift counter along
-        bne @dig                ; keep looping until the bit falls off
-        
-        rol @count              ; (put the bit back on the end)
-        rts
+;;        bcs @sym                ; carry set = use symbols
+;;
+;;        ; print "0" & "1" digits
+;;        ;---------------------------------------------------------------------
+;;@dig:   asl                     ; pop a bit off the value
+;;        tax                     ; remember remainder for next loop
+;;        lda # $30               ; PETSCII '0'
+;;        adc # 0                 ; PETSCII '1' if bit was 1
+;;        jsr .kernal_chrout      ; print digit
+;;
+;;        txa                     ; retrieve remaining value before looping
+;;        asl @count              ; shift counter along
+;;        bne @dig                ; keep looping until the bit falls off
+;;        
+;;        rol @count              ; (put the bit back on the end)
+;;        rts
 
         ; print "-" & "*" digits
         ;-----------------------------------------------------------------------
@@ -1210,24 +1238,6 @@ bsod_nmi_kernalon:
         !byte   .NULL_VALUE
                         
 .frzn_cpu_port: ; backup of the CPU port ($01)
-        !byte   .NULL_VALUE
-                        
-.frzn_nmi:      ; NMI vector
-.frzn_nmi_lo:
-        !byte   .NULL_VALUE
-.frzn_nmi_hi:
-        !byte   .NULL_VALUE
-                        
-.frzn_rst:      ; RESET vector
-.frzn_rst_lo:
-        !byte   .NULL_VALUE
-.frzn_rst_hi:
-        !byte   .NULL_VALUE
-                        
-.frzn_irq:      ; IRQ vector
-.frzn_irq_lo:
-        !byte   .NULL_VALUE
-.frzn_irq_hi:
         !byte   .NULL_VALUE
 
 .frzn_cia2:     ; CIA #2 port A (contains VIC bank)
