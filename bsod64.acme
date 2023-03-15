@@ -1102,8 +1102,8 @@ bsod_hook_irq:
 ;
 .bsod_nmi_nokernal:
         ;=======================================================================
-        ; acknowledge the interrupt (we must R/M/W the register)
-        asl .cia2 + .CIA_IRQ
+        ; acknowledge the interrupt
+        bit .cia2 + .CIA_IRQ
 
         ; fallthrough
         ; ...
