@@ -54,8 +54,8 @@
 ;       normalisation is required to handle both behaviours equally
 ;
 ; *     a normal JSR or interrupt subtracts one from the program counter before
-;       pushing it to the stack, this is because the RTS & RTI instructions
-;       always automatically add 1 to the program counter (an internal detail).
+;       pushing it to the stack, this is because the RTS instruction always
+;       automatically adds 1 to the program counter (an internal detail).
 ;       the BRK instruction, however *adds* 1 to the program counter before 
 ;       pushing it to the stack! returning from a BRK interrupt therefore skips
 ;       over a byte unless this is accounted for!
@@ -163,7 +163,7 @@ bsod_basic:                                     ; (`SYS 49152` / `jsr $c000`)
 ; BSOD64
 ;
 ;-------------------------------------------------------------------------------
-        jmp .bsod_hook
+        jmp bsod_hook
 
 
 bsod_jsr:                                       ; (`SYS 49155` / `jsr $c003`)
@@ -434,33 +434,35 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
         jsr .kernal_restor      ; (does not enable interrupts)
 
-        ; put handlers in place for interrupts
-        ; for whenever we turn off the KERNAL:
+        ; put handlers in place for interrupts when BSOD64 is running:
+        ;
+        ; now that BSOD64 is invoked we don't want BSOD-ception! due to the
+        ; vectors being reset (above), the default KERNAL handlers will be
+        ; in place; we want to override RESTORE (nmi) and BRK handlers,
+        ; as well as provide safety stubs for when KERNAL ROM is off
         ;
         ; install the NMI handler:
-        ; (KERNAL vectored NMI handler)
-        lda #< bsod_nmi_kernalon
-        sta .vectors+.VECTOR_NMI+0
-        lda #> bsod_nmi_kernalon
-        sta .vectors+.VECTOR_NMI+1
-        ; (CPU vectored NMI handler)
-        lda #< bsod_nmi_nokernal
+        ; (KERNAL vectored NMI handler -- stop RESTORE key)
+        lda #< .bsod_nmi_kernalon
+        sta .vectors+.VECTOR_NMI+.lo
+        lda #> .bsod_nmi_kernalon
+        sta .vectors+.VECTOR_NMI+.hi
+        ; (CPU vectored NMI handler -- ignore RESTORE during KERNAL off)
+        lda #< .bsod_nmi_nokernal
         sta .cpu_nmi_lo
-        lda #> bsod_nmi_nokernal
+        lda #> .bsod_nmi_nokernal
         sta .cpu_nmi_hi
 
         ; install the IRQ handler:
-        ; (KERNAL vectored IRQ handler)
-        lda #< bsod_irq_kernalon
-        sta .vectors+.VECTOR_IRQ+0
-        sta .vectors+.VECTOR_BRK+0
-        lda #> bsod_irq_kernalon
-        sta .vectors+.VECTOR_IRQ+1
-        sta .vectors+.VECTOR_BRK+1
-        ; (CPU vectored IRQ handler)
-        lda #< bsod_irq_nokernal
+        ; (KERNAL vectored BRK handler)
+        lda #< .bsod_rti
+        sta .vectors + .VECTOR_BRK+.lo
+        lda #> .bsod_rti
+        sta .vectors + .VECTOR_BRK+.hi
+        ; (CPU vectored IRQ handler - IRQ during KERNAL off)
+        lda #< .bsod_irq_nokernal
         sta .cpu_irq_lo
-        lda #> bsod_irq_nokernal
+        lda #> .bsod_irq_nokernal
         sta .cpu_irq_hi
 
 ;;        ; invoked by interrupt: was it BRK?
@@ -963,28 +965,48 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 +       rts
 
 
-.bsod_hook:
+bsod_hook:
 ;===============================================================================
 ; install hooks for BSOD64 to trap execution:
+;
+; when the KERNAL ROM is switched on, it controls the interrupt vectors at
+; $FFFA-$FFFF. this means that there's some extra indirection that happens
+; whenever an IRQ occurs. first, the KERNAL pushes A, X & Y onto the stack
+; and then calls the vector at $0314; by default this is the routine that
+; handles the BASIC interrupt, e.g. blinking the cursor. if the KERNAL is
+; on but BASIC is off, the system will crash!
 ;-------------------------------------------------------------------------------
         sei                     ; disable interrupts whilst we alter them...
 
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
 
-        ; hook the NMI, i.e. the RESTORE key
-        lda #< .bsod_hook_nmi
+        ; hook the NMI, i.e. the RESTORE key:
+        ; -- invoke BSOD64 when RESTORE is pressed
+        lda #< bsod_hook_nmi
         sta .vectors + .VECTOR_NMI+.lo
         sta .cpu_nmi_lo
-        lda #> .bsod_hook_nmi
+        lda #> bsod_hook_nmi
         sta .vectors + .VECTOR_NMI+.hi
         sta .cpu_nmi_hi
 
-;;        ; TODO: the IRQ handler has to check for the BRK bit
-;;        lda #< bsod_irq_nokernal
-;;        sta .cpu_irq_lo
-;;        lda #> bsod_irq_nokernal
-;;        sta .cpu_irq_hi
+        ; hook the IRQ when the KERNAL is off:
+        ; -- do not crash the machine if the KERNAL is off, but interrupts
+        ;    are on. this also has to check for the BRK bit, the KERNAL
+        ;    does this instead when enabled
+        lda #< bsod_hook_irq
+        sta .cpu_irq_lo
+        lda #> bsod_hook_irq
+        sta .cpu_irq_hi
+
+        ; hook the BRK vector when the KERNAL is on:
+        ; -- when a BRK instruction is encountered, the KERNAL will detect
+        ;    this and jump to its BRK vector instead of its IRQ vector;
+        ;    this is why hooking the KERNAL IRQ vector isn't necessary
+        lda #< bsod_hook_brk
+        sta .vectors + .VECTOR_BRK+.lo
+        lda #> bsod_hook_brk
+        sta .vectors + .VECTOR_BRK+.hi
 
         lda # .MEM_DEFAULT      ; turn *on* KERNAL,
         sta .zp+1               ;  BASIC, and I/O
@@ -992,14 +1014,19 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         cli                     ; re-enable interrupts
         rts
 
-.bsod_hook_nmi:
-        ;-----------------------------------------------------------------------
-        pha
-        txa
-        pha
-        tya
+bsod_hook_nmi:
+        ;=======================================================================
+        pha                     ; for NMI, the KERNAL does *not* push 
+        txa                     ;  the registers first, so we do that
+        pha                     ;  ourselves to normalise against the
+        tya                     ;  regular IRQ
         pha
 
+        ; fallthrough
+        ; ...
+
+bsod_hook_brk:
+        ;=======================================================================
         jsr bsod_irq            ; we won't ever be returning from here!
 
 ;;        pla
@@ -1012,27 +1039,32 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;;        ; (restore processor flags, enable interrupts)
 ;;        rti
 
-;===============================================================================
-; interrupt handlers:
-;
-; when the KERNAL ROM is switched on, it controls the interrupt vectors at
-; $FFFA-$FFFF. this means that there's some extra indirection that happens
-; whenever an IRQ occurs. first, the KERNAL pushes A, X & Y onto the stack
-; and then calls the vector at $0314; by default this is the routine that
-; handles the BASIC interrupt, e.g. blinking the cursor. if the KERNAL is
-; on but BASIC is off, the system will crash!
-;
-; unless you are writing a BASIC extension there is no reason to keep BASIC
-; switched on (you can use the RAM underneath instead), therefore we must
-; provide a routine to replace the BASIC interrupt. it doesn't have to do
-; any actual work, just merely exit in the correct way, that is, restore
-; the register from the stack and call `rti`. alternatively, one can jump
-; to $EA81 which is the KERNAL's code to do the same, but I recommend
-; against this because that assumes that the machine is a C64 with
-; stock ROMs and this might not be the case!
-;
-;-------------------------------------------------------------------------------
-bsod_irq_kernalon:
+bsod_hook_irq:
+        ;=======================================================================
+        ; for BSOD64 integration we push the registers to the stack
+        ;
+        pha                     ; backup pre-interrupt A register
+        txa                     ; backup pre-interrupt...
+        pha                     ; ...X register
+        tya                     ; backup pre-interrupt...
+        pha                     ; ...Y register
+
+        ; acknowledge interrupt to prevent double-firing:
+        ; read from CIA1 to acknowledge interrupt
+        bit .cia1 + .CIA_IRQ
+        ; read-modify-write the VIC-II status register for raster IRQs
+        asl .vic  + .VIC_IRQ_STATUS
+
+        ;-----------------------------------------------------------------------
+        ; check if BRK occurred:
+        tsx                     ; we need to look on the stack
+        lda .stack+4, x         ; retrieve the processor flags at interrupt
+        and # %00010000         ; check the BRK bit
+        beq .bsod_rti
+        jsr bsod_irq            ; invoke BSOD64!
+
+.bsod_rti:
+        ;-----------------------------------------------------------------------
         ; pull the registers from the stack
         ; (in reverse order)
         pla                     ; pull...
@@ -1041,10 +1073,25 @@ bsod_irq_kernalon:
         tax                     ; ...X
         pla                     ; pull A
 
-bsod_irq_nokernal:
-        ;-----------------------------------------------------------------------
-        ; acknowledge the interrupt (we must R/M/W the register)
-        asl .cia1 + .CIA_IRQ
+        ; return from interrupt
+        ; (restore processor flags, enable interrupts)
+        rti
+
+
+;===============================================================================
+; interrupt handlers when BSOD64 is running:
+;
+; we don't want BSOD64 firing from within BSOD64! due to the freeze and reset
+; the default KERNAL IRQs will be restored which are fine, but we do need to
+; handle the IRQs for when the KERNAL ROM is off
+;
+; these routines do the minimum amount needed
+; to service interrupts when the KERNAL ROM is off
+;-------------------------------------------------------------------------------
+.bsod_irq_nokernal:
+        ;=======================================================================
+        ; acknowledge the interrupt
+        bit .cia1 + .CIA_IRQ
 
         ; return from interrupt
         ; (restore processor flags, enable interrupts)
@@ -1053,13 +1100,16 @@ bsod_irq_nokernal:
 ; likewise, without the KERNAL, the RAM underneath
 ; will determine the NMI handler (the RESTORE key)
 ;
-bsod_nmi_nokernal:
-        ;-----------------------------------------------------------------------
+.bsod_nmi_nokernal:
+        ;=======================================================================
         ; acknowledge the interrupt (we must R/M/W the register)
         asl .cia2 + .CIA_IRQ
 
-bsod_nmi_kernalon:
-        ;-----------------------------------------------------------------------
+        ; fallthrough
+        ; ...
+
+.bsod_nmi_kernalon:
+        ;=======================================================================
         ; return from interrupt
         ; (restore processor flags, enable interrupts)
         rti
