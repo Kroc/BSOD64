@@ -249,30 +249,68 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
         and # %00010000         ; isolate the BRK bit
         beq +                   ; use $00 for non-BRK
-        lda # $ff               ; use $FF for BRK
+        lda # $80               ; use $80 for BRK (bit7=1)
 +       sta .bsod_is_brk        ; (not valid if .bsod_is_jsr is set!)
 
         ; and lastly extract the program-counter:
         ;
         pla                     ; program counter lo-byte
-        sta .frzn_pc_lo         ; store as frozen PC, lo-byte
+        tax                     ; keep temporarily for adjusting
         pla                     ; program counter hi-byte
-        sta .frzn_pc_hi         ; store as frozen PC, hi-byte
-        
-        ; during an IRQ or NMI, the PC on the stack is that of the next
-        ; instruction to be executed. however, the 6502 processor always
-        ; auto-increments the program counter during an RTS instruction,
-        ; so the address pushed on the stack with JSR is one less than
-        ; the next instruction in the code -- if BSOD64 is invoked by
-        ; JSR then we need to correct for this!
+        tay                     ; keep temporarily for adjusting
+
+        ; fix program counter:
+        ;-----------------------------------------------------------------------
+        ; the address pushed on the stack with JSR is one byte less
+        ; than the next instruction in the code due to the 6502 processor
+        ; auto-incrementing the program counter with an RTS instruction;
+        ; if BSOD64 is invoked by JSR then we need to correct for this!
         ;
         bit .bsod_is_jsr        ; check for the JSR flag
-        bpl +                   ; skip over if NMI/IRQ/BRK
-        inc .frzn_pc_lo         ; add 1 to the PC, lo-byte
-        bne +                   ; if no overflow, finished
-        inc .frzn_pc_hi         ; lo overflow, add 1 to PC, hi-byte
+        bmi @pcjsr              ; if yes, add one to PC
 
-+       tsx                     ; get the stack pointer
+        ; check for BRK / BRK code:
+        ;
+        ; the BRK interrupt incremented the PC by 2, skipping a byte --
+        ; we want to read that byte back as the programmer's BRK code
+        ;
+        bit .bsod_is_brk        ; was BRK interrupt?
+        bpl @pc                 ; if no, skip
+
+        ; decrement the PC by 1 to get at the BRK parameter:
+        ;
+        txa                     ; retrieve PC, lo-byte
+        bne +                   ; if zero, it'll cause an underflow
+        dey                     ; -> decrement the PC hi-byte
++       dex                     ; subtract 1 from the PC, lo-byte
+
+        ; read the BRK code from PC-1:
+        stx @pcbrk+1
+        sty @pcbrk+2
+@pcbrk  lda .null_addr
+        sta .bsod_brk_code
+
+        ; fall through to the PC+1 code
+        ; to put the PC back where it was!
+        ; ...
+
+        ; correct PC for JSR:
+        ;
+        ; the address pushed on the stack with JSR is one byte less
+        ; than the next instruction in the code due to the 6502 processor
+        ; auto-incrementing the program counter with an RTS instruction;
+        ; if BSOD64 is invoked by JSR then we need to correct for this!
+        ;
+@pcjsr: inx                     ; add 1 to PC, lo-byte
+        bne +                   ; if it overflowed
+        iny                     ; -> increment PC, hi-byte
+
++       ; store the adjusted PC for printing:
+@pc:    stx .frzn_pc_lo
+        sty .frzn_pc_hi
+
+        ; all bytes pulled from stack,
+        tsx                     ; get the stack pointer
         stx .frzn_sp            ; keep an original copy
 
         ; freeze low-memory:
@@ -465,13 +503,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #> .bsod_irq_nokernal
         sta .cpu_irq_hi
 
-;;        ; invoked by interrupt: was it BRK?
-;;        bit .bsod_is_brk
-;;        bpl +
-;;        ; the BRK interrupt incremented the PC by 2, skipping a byte --
-;;        ; we want to read that byte back as the programmer's BRK code
-;;        ; (note that A is the PC lo-byte)
-;;+
         ; fallthrough
         ; ...
 
@@ -819,9 +850,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;-------------------------------------------------------------------------------
         !byte   .STR_POS, 24, 0
         !pet    .PET_RVSON, .PET_WHITE
-        !pet    "BSOD64v0.1"
-        !pet    .STR_REPT, 20, " "
         !pet    "F1:SCREEN"
+        !pet    .STR_REPT, 20, " "
+        !pet    "BSOD64v0.1"
         !pet    .PET_RVSOFF
         !byte   .STR_END
 
@@ -1261,7 +1292,10 @@ bsod_hook_irq:
 ;
 .bsod_is_jsr:   ; BSOD64 invoked by JSR? $00 = no, $80 (bit7) = yes
         !byte   $00
-.bsod_is_brk:   ; BRK interrupt flag: $00 = no, $FF = yes
+.bsod_is_brk:   ; BRK interrupt flag: $00 = no, $80 (bit7) = yes
+        !byte   $00
+
+.bsod_brk_code: ; if BRK, the byte following the BRK instruction:
         !byte   $00
 
 ; these values have to be stored within the code space because they have to be
