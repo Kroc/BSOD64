@@ -435,16 +435,21 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; reset machine state:
         ;-----------------------------------------------------------------------
-        ; since the original stack is now backed-up, we can re-use the stack
-        ; however we please. because the user's program could have the stack
-        ; at any depth, even near to overflowing, we reset the stack pointer
-        ldx # $ff
-        txs
+        ; backup the byte at $A000 in RAM as the RAM test clobbers it!
+        ; this interesting quirk of the boot procedure brought to light
+        ; by Greg Naçu: <https://c64os.com/post/loadrunfromasm1>
+        ;
+        ; BASIC ROM is currently off so we can access the RAM underneath.
+        ; when the RAM test runs, it will clobber byte $A000 once it hits
+        ; BASIC ROM, we need to backup and then restore this byte later
+        ;
+        lda $a000
+        sta .ramtas_fix
 
-        ; TODO: do we need to reset the vectors ($0314-$0333)
-        ;       before enabling the KERNAL? (interrupts are off)
+        ; enable KERNAL ROM:
+        ;
         lda # .MEM_KERNAL_IO    ; enable BASIC,
-        sta .zp+1               ; KERNAL & I/O
+        sta .zp+1               ;  KERNAL & I/O
 
         lda # %00000000         ; turn screen off
         sta .vic+.VIC_SCREEN_VERT
@@ -456,7 +461,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; this KERNAL routine erases the zero page, pages 2 & 3, and runs
         ; a memory test before configuring BASIC limits. it sets the page
         ; number for screen memory to $04 just before it exits, but does
-        ; not change the actual VIC bank
+        ; not change the actual VIC bank. the stack pointer is also reset
+        ; by this routine so we don't need to do it ourself
         ;
         jsr .kernal_ramtas      ; (does not enable interrupts)
 
@@ -481,9 +487,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sta .vectors+.VECTOR_NMI+.hi
         ; (CPU vectored NMI handler -- ignore RESTORE during KERNAL off)
         lda #< .bsod_nmi_nokernal
-        sta .cpu_nmi_lo
+        sta .cpu_nmi_lo         ; (note: write-through-ROM)
         lda #> .bsod_nmi_nokernal
-        sta .cpu_nmi_hi
+        sta .cpu_nmi_hi         ; (note: write-through-ROM)
 
         ; install the IRQ handler:
         ; (KERNAL vectored BRK handler)
@@ -493,9 +499,16 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sta .vectors + .VECTOR_BRK+.hi
         ; (CPU vectored IRQ handler - IRQ during KERNAL off)
         lda #< .bsod_irq_nokernal
-        sta .cpu_irq_lo
+        sta .cpu_irq_lo         ; (note: write-through-ROM)
         lda #> .bsod_irq_nokernal
-        sta .cpu_irq_hi
+        sta .cpu_irq_hi         ; (note: write-through-ROM)
+
+        ; restore the RAMTAS $A000 byte:
+        ;
+        dec .zp+1               ; turn off BASIC ROM (opening $A000 to RAM)
+        lda .ramtas_fix         ; read the original byte
+        sta $a000               ;  and restore it
+        inc .zp+1               ; turn BASIC ROM back on
 
         ; fallthrough
         ; ...
@@ -1333,4 +1346,7 @@ bsod_hook_irq:
 
 .frzn_cia2:     ; CIA #2 port A (contains VIC bank)
         !byte   .NULL_VALUE
+
+.ramtas_fix:    ; backup of the byte in RAM at $A000 due to RAMTAS bug!    
+        !byte   $55
 }
