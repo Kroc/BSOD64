@@ -288,19 +288,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         stx @pcbrk+1
         sty @pcbrk+2
 @pcbrk  lda .null_addr
-        sta .bsod_brk_code
+        sta .frzn_brk
 
         ; fall through to the PC+1 code
         ; to put the PC back where it was!
         ; ...
 
         ; correct PC for JSR:
-        ;
-        ; the address pushed on the stack with JSR is one byte less
-        ; than the next instruction in the code due to the 6502 processor
-        ; auto-incrementing the program counter with an RTS instruction;
-        ; if BSOD64 is invoked by JSR then we need to correct for this!
-        ;
 @pcjsr: inx                     ; add 1 to PC, lo-byte
         bne +                   ; if it overflowed
         iny                     ; -> increment PC, hi-byte
@@ -508,8 +502,6 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
 .bsod_BSOD:
 ;===============================================================================
-;
-;-------------------------------------------------------------------------------
         ; re-initialise the CIAs, enable I/O and BASIC+KERNAL ROMs,
         ; also silences the SID chip
         ;
@@ -601,6 +593,24 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 +       lda #< .str_status
         ldx #> .str_status
         jsr .bsod_print
+
+        ; display the method BSOD64 was invoked with; JSR/NMI or BRK:
+        ;
+        bit .bsod_is_jsr        ; invoked with JSR? 
+        bpl +
+        lda #< .str_jsr         ; print "JSR"
+        ldx #> .str_jsr         ; ...
+        bne ++
++       bit .bsod_is_brk        ; invoked with BRK?
+        bpl +
+        lda #< .str_brk         ; print "BRK:$xx"
+        ldx #> .str_brk         ; where xx is the BRK parameter
+        bne ++
++       lda #< .str_nmi         ; print "NMI"
+        ldx #> .str_nmi         ; ...
+
+        ; the string address having been selected, print it
+++      jsr .bsod_print
 
         ; we can't print the bottom-rightmost character on the screen
         ; or it'll scroll, so we POKE it in manually
@@ -850,14 +860,30 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ;-------------------------------------------------------------------------------
         !byte   .STR_POS, 24, 0
         !pet    .PET_RVSON, .PET_WHITE
+        !pet    .STR_REPT, 30, " "
         !pet    "F1:SCREEN"
-        !pet    .STR_REPT, 20, " "
-        !pet    "BSOD64v0.1"
-        !pet    .PET_RVSOFF
+        ; reposition the cursor to print "JSR"/"NMI"/"BRK"
+        !byte   .STR_POS, 24, 0
+        !byte   .STR_END
+.str_jsr:
+        ;-----------------------------------------------------------------------
+        !pet    "JSR"
+        !byte   .STR_END
+.str_nmi:
+        ;-----------------------------------------------------------------------
+        !pet    "NMI"
+        !byte   .STR_END
+.str_brk:
+        ;-----------------------------------------------------------------------
+        !pet    "BRK:"
+        !byte   .STR_HEXB
+.frzn_brk:
+        !byte   $00             ; the byte following the BRK instruction
         !byte   .STR_END
 
+
 .str_mem:
-        ;-----------------------------------------------------------------------
+;-------------------------------------------------------------------------------
         !byte   .STR_POS, 5, 0
         !pet    .PET_RVSON
         !pet    "$"
@@ -1293,9 +1319,6 @@ bsod_hook_irq:
 .bsod_is_jsr:   ; BSOD64 invoked by JSR? $00 = no, $80 (bit7) = yes
         !byte   $00
 .bsod_is_brk:   ; BRK interrupt flag: $00 = no, $80 (bit7) = yes
-        !byte   $00
-
-.bsod_brk_code: ; if BRK, the byte following the BRK instruction:
         !byte   $00
 
 ; these values have to be stored within the code space because they have to be
