@@ -88,6 +88,14 @@
 .PET_CRSR_RT            = $1d   ; move the cursor right a column!
 
 .PET_0                  = $30   ; 0
+.PET_1                  = $30   ; 1
+.PET_2                  = $30   ; 2
+.PET_3                  = $30   ; 3
+.PET_4                  = $30   ; 4
+.PET_5                  = $30   ; 5
+.PET_6                  = $30   ; 6
+.PET_7                  = $30   ; 7
+.PET_8                  = $30   ; 8
 .PET_9                  = $39   ; 9
 .PET_PLUS               = $2b   ; +
 .PET_MINUS              = $2d   ; -
