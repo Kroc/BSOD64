@@ -672,9 +672,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;
 .wait_for_key:
         ;=======================================================================
-        jsr .kernal_scnkey      ; why isn't this being done in the std IRQ?
-        jsr .kernal_getin
-        beq .wait_for_key
+        ; read from the keyboard buffer:
+        ;
+        ; note that because the standard KERNAL interrupts are running,
+        ; `.kernal_scnkey` is being called to populate the buffer for us
+        ;
+        jsr .kernal_getin       ; fetch a keypress -- returns in PETSCII!
+        beq .wait_for_key       ; if 0, no keypress, keep waiting
         
         cmp # .PET_CRSR_UP      ; cursor-up:
         beq @page_prev          ; - show previous memory page
@@ -802,9 +806,12 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         cli                     ; re-enable interrupts
 
         ; PRESS ANY KEY
--       jsr .kernal_scnkey      ; why isn't this being done in the std IRQ?
-        jsr .kernal_getin
-        beq -
+        ;
+        ; note that because the standard KERNAL interrupts are running,
+        ; `.kernal_scnkey` is being called to populate the buffer for us
+        ;
+-       jsr .kernal_getin       ; fetch a keypress -- returns in PETSCII!
+        beq -                   ; if 0, no keypress, keep waiting
         jmp .bsod_BSOD
 
 
