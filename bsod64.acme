@@ -611,9 +611,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         beq +
 
         lda #< .frzn_stack
-        sta .zp_addr_lo
+        sta+1 .zp_addr_lo
         lda #> .frzn_stack
-        sta .zp_addr_hi
+        sta+1 .zp_addr_hi
         jsr .bsod_pop16
 
         ; print bottom status bar:
@@ -667,9 +667,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         cmp # 8
         bcs +
         adc # >BSOD64_DATA_ADDR ; re-base address into the frozen data area
-+       sta .zp_addr_hi         ; write into code that reads from address
++       sta+1 .zp_addr_hi       ; write into code that reads from address
         ldy # $00               ; Y will be byte counter
-        sty .zp_addr_lo         ;  and starting address lo-byte
+        sty+1 .zp_addr_lo       ;  and starting address lo-byte
 
 --      lda # "$"
         jsr .kernal_chrout
@@ -962,7 +962,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         sei
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
-        lda (.zp_addr), y       ; read byte from frozen memory
+        lda+1 (.zp_addr), y     ; read byte from frozen memory
         pha                     ; (put aside before printing)
         lda # .MEM_DEFAULT      ; turn *on* KERNAL,
         sta .zp+1               ;  BASIC, and I/O
@@ -982,8 +982,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 ; in:   A       address of PETSCII string, lo-byte
 ;       X       address of PETSCII string, hi-byte
 ;-------------------------------------------------------------------------------
-        sta .zp_str_lo          ; store the PETSCII string
-        stx .zp_str_hi          ;  address in zero-page for indexing
+        sta+1 .zp_str_lo        ; store the PETSCII string
+        stx+1 .zp_str_hi        ;  address in zero-page for indexing
         ldy # -1                ; string index (start at -1 for pre-increment)
         bne @loop               ; jump into the loop
 
@@ -991,7 +991,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 -       jsr @cc                 ; handle custom control code
 
 @loop:  iny                     ; move to next character
-        lda (.zp_str), y        ; read character from string
+        lda+1 (.zp_str), y      ; read character from string
         beq --                  ; = .STR_END? -- stop printing
         cmp # $f0               ; values $F0-$FF are control codes
         bcs -                   ; handle custom control code?
@@ -1009,12 +1009,12 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne +
 
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read cursor row
+        lda+1 (.zp_str), y      ; read cursor row
         tax                     ; use X for KERNAL call
         iny                     ; (move to next byte in string)
         tya                     ; (backup Y before KERNAL call)
         pha                     ;
-        lda (.zp_str), y        ; read cursor column
+        lda+1 (.zp_str), y      ; read cursor column
         tay                     ; move cursor col to Y-register
         clc                     ; = set cursor
         jsr .kernal_plot        ; call KERNAL to position cursor
@@ -1028,10 +1028,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne +
 
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read repeat count
+        lda+1 (.zp_str), y      ; read repeat count
         tax                     ; use X for counter
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read character
+        lda+1 (.zp_str), y      ; read character
 -       jsr .kernal_chrout      ; print character
         dex
         bne -
@@ -1043,10 +1043,10 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne +
 
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read value to print, hi-byte
+        lda+1 (.zp_str), y      ; read value to print, hi-byte
         tax                     ; put aside hi-byte
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read value to print, lo-byte
+        lda+1 (.zp_str), y      ; read value to print, lo-byte
         jmp .bsod_print_hex16
 
         ; .STR_HEXB : print 8-bit hexadecimal value
@@ -1055,7 +1055,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne +
 
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read value to print
+        lda+1 (.zp_str), y      ; read value to print
         jmp .bsod_print_hex8    ; print two hexadecimal digits
 
         ; .STR_FLAGS : print 8-bit binary value as flags
@@ -1064,7 +1064,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         bne +
 
         iny                     ; (move to next byte in string)
-        lda (.zp_str), y        ; read value to print
+        lda+1 (.zp_str), y      ; read value to print
         sec
         jmp .bsod_print_bin8
 
