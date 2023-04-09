@@ -75,6 +75,8 @@
         BSOD64_UNDER_IO = 1
 }
 
+!ifndef BSOD64_USE_BRK          BSOD64_USE_BRK = 1
+
 !zone   bsod64 {
 !source "system.acme"
 
@@ -128,7 +130,7 @@
 ; this is the placeholder value
 .NULL_VALUE             = $88
 
-; terminators used for the string-printing routines:
+; custom PETSCII codes for string printing:
 ;
 .STR_END                = $00   ; standard terminator
 .STR_POS                = $f0   ; change cursor pos; row & col bytes follow
@@ -247,11 +249,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; this flag is only valid with an interrupt; if BSOD64 is invoked
         ; by JSR, the BRK flag is *always* set by the PHP instruction
         ;
+!if     BSOD64_USE_BRK = 1 {
+        ;///////////////////////////////////////////////////////////////////////
         and # %00010000         ; isolate the BRK bit
         beq +                   ; use $00 for non-BRK
         lda # $80               ; use $80 for BRK (bit7=1)
 +       sta .bsod_is_brk        ; (not valid if .bsod_is_jsr is set!)
-
+}       ;///////////////////////////////////////////////////////////////////////
         ; and lastly extract the program-counter:
         ;
         pla                     ; program counter lo-byte
@@ -266,6 +270,11 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; auto-incrementing the program counter with an RTS instruction;
         ; if BSOD64 is invoked by JSR then we need to correct for this!
         ;
+!if     BSOD64_USE_BRK = 0 {
+        ;///////////////////////////////////////////////////////////////////////
+        bit .bsod_is_jsr        ; check for the JSR flag
+        bpl @pc                 ; if no, use current PC
+} else {;///////////////////////////////////////////////////////////////////////
         bit .bsod_is_jsr        ; check for the JSR flag
         bmi @pcjsr              ; if yes, add one to PC
 
@@ -293,6 +302,8 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ; fall through to the PC+1 code
         ; to put the PC back where it was!
         ; ...
+        ;
+}       ;///////////////////////////////////////////////////////////////////////
 
         ; correct PC for JSR:
 @pcjsr: inx                     ; add 1 to PC, lo-byte
@@ -493,10 +504,14 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 
         ; install the IRQ handler:
         ; (KERNAL vectored BRK handler)
+!if     BSOD64_USE_BRK = 1 {
+        ;///////////////////////////////////////////////////////////////////////
         lda #< .bsod_rti
         sta .vectors + .VECTOR_BRK+.lo
         lda #> .bsod_rti
         sta .vectors + .VECTOR_BRK+.hi
+}       ;///////////////////////////////////////////////////////////////////////
+
         ; (CPU vectored IRQ handler - IRQ during KERNAL off)
         lda #< .bsod_irq_nokernal
         sta .cpu_irq_lo         ; (note: write-through-ROM)
@@ -614,11 +629,14 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         lda #< .str_jsr         ; print "JSR"
         ldx #> .str_jsr         ; ...
         bne ++
+!if     BSOD64_USE_BRK = 1 {
+        ;///////////////////////////////////////////////////////////////////////
 +       bit .bsod_is_brk        ; invoked with BRK?
         bpl +
         lda #< .str_brk         ; print "BRK:$xx"
         ldx #> .str_brk         ; where xx is the BRK parameter
         bne ++
+}       ;///////////////////////////////////////////////////////////////////////
 +       lda #< .str_nmi         ; print "NMI"
         ldx #> .str_nmi         ; ...
 
@@ -902,6 +920,9 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
         ;-----------------------------------------------------------------------
         !pet    "NMI"
         !byte   .STR_END
+
+!if     BSOD64_USE_BRK = 1 {
+        ;///////////////////////////////////////////////////////////////////////
 .str_brk:
         ;-----------------------------------------------------------------------
         !pet    "BRK:"
@@ -909,7 +930,7 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 .frzn_brk:
         !byte   $00             ; the byte following the BRK instruction
         !byte   .STR_END
-
+}       ;///////////////////////////////////////////////////////////////////////
 
 .str_mem:
 ;-------------------------------------------------------------------------------
@@ -1054,14 +1075,13 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 bsod_hook:
 ;===============================================================================
 ; install hooks for BSOD64 to trap execution:
-;
-; when the KERNAL ROM is switched on, it controls the interrupt vectors at
-; $FFFA-$FFFF. this means that there's some extra indirection that happens
-; whenever an IRQ occurs. first, the KERNAL pushes A, X & Y onto the stack
-; and then calls the vector at $0314; by default this is the routine that
-; handles the BASIC interrupt, e.g. blinking the cursor. if the KERNAL is
-; on but BASIC is off, the system will crash!
 ;-------------------------------------------------------------------------------
+        ; TODO: this assumes interrupts are on, and always enables them upon
+        ; exit. this routine is only really intended to be used from BASIC or
+        ; machine-language programs that don't use any custome interrupts.
+        ; machine-language programs that use custom interrupts should call
+        ; BSOD64 from their own handlers and not use these
+        ;
         sei                     ; disable interrupts whilst we alter them...
 
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
@@ -1089,10 +1109,13 @@ bsod_hook:
         ; -- when a BRK instruction is encountered, the KERNAL will detect
         ;    this and jump to its BRK vector instead of its IRQ vector;
         ;    this is why hooking the KERNAL IRQ vector isn't necessary
+!if     BSOD64_USE_BRK = 1 {
+        ;///////////////////////////////////////////////////////////////////////
         lda #< bsod_hook_brk
         sta .vectors + .VECTOR_BRK+.lo
         lda #> bsod_hook_brk
         sta .vectors + .VECTOR_BRK+.hi
+}       ;///////////////////////////////////////////////////////////////////////
 
         lda # .MEM_DEFAULT      ; turn *on* KERNAL,
         sta .zp+1               ;  BASIC, and I/O
@@ -1127,22 +1150,24 @@ bsod_hook_brk:
 
 bsod_hook_irq:
         ;=======================================================================
+        ; acknowledge interrupt to prevent double-firing:
+        ; read from CIA1 to acknowledge interrupt
+        bit .cia1 + .CIA_IRQ
+        ; read-modify-write the VIC-II status register for raster IRQs
+        ;;asl .vic  + .VIC_IRQ_STATUS
+
         ; for BSOD64 integration we push the registers to the stack
         ;
+!if     BSOD64_USE_BRK = 1 {
+        ;///////////////////////////////////////////////////////////////////////
         pha                     ; backup pre-interrupt A register
         txa                     ; backup pre-interrupt...
         pha                     ; ...X register
         tya                     ; backup pre-interrupt...
         pha                     ; ...Y register
 
-        ; acknowledge interrupt to prevent double-firing:
-        ; read from CIA1 to acknowledge interrupt
-        bit .cia1 + .CIA_IRQ
-        ; read-modify-write the VIC-II status register for raster IRQs
-        asl .vic  + .VIC_IRQ_STATUS
-
-        ;-----------------------------------------------------------------------
         ; check if BRK occurred:
+        ;-----------------------------------------------------------------------
         tsx                     ; we need to look on the stack
         lda .stack+4, x         ; retrieve the processor flags at interrupt
         and # %00010000         ; check the BRK bit
@@ -1158,6 +1183,7 @@ bsod_hook_irq:
         pla                     ; pull...
         tax                     ; ...X
         pla                     ; pull A
+}       ;///////////////////////////////////////////////////////////////////////
 
         ; return from interrupt
         ; (restore processor flags, enable interrupts)

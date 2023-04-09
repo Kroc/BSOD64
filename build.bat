@@ -16,8 +16,9 @@ REM # build a version for C64OS during boot
     -o "build\bsod64-c64os.prg" ^
     -l "build\bsod64-c64os.sym" ^
     --format cbm ^
-     -DBSOD64_CODE_ADDR=$7c80 ^
-     -DBSOD64_DATA_ADDR=$7000 ^
+     -DBSOD64_CODE_ADDR=$7000 ^
+     -DBSOD64_DATA_ADDR=$8000 ^
+     -DBSOD64_USE_BRK=0 ^
       "bsod64.acme"
 
 POPD
