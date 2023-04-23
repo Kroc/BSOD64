@@ -1075,15 +1075,20 @@ bsod_irq:                                       ; (`SYS 49158` / `jsr $c006`)
 bsod_hook:
 ;===============================================================================
 ; install hooks for BSOD64 to trap execution:
+;
+; this routine is only really intended to be used from BASIC or machine-
+; language programs that don't use any custome interrupts. machine-language
+; programs that use custom interrupts should call BSOD64 from their own
+; handlers and not use these
 ;-------------------------------------------------------------------------------
-        ; TODO: this assumes interrupts are on, and always enables them upon
-        ; exit. this routine is only really intended to be used from BASIC or
-        ; machine-language programs that don't use any custome interrupts.
-        ; machine-language programs that use custom interrupts should call
-        ; BSOD64 from their own handlers and not use these
-        ;
+        php                     ; preserve current interrupt state
         sei                     ; disable interrupts whilst we alter them...
 
+        ; NOTE: the CPU data-direction register ($00)
+        ;       could prevent changing memory-layout!
+        ;
+        lda .zp+1               ; current memory layout 
+        pha                     ; preserve before we change it
         lda # .MEM_ALL_RAM      ; turn *off* BASIC,
         sta .zp+1               ;  KERNAL, and I/O
 
@@ -1117,10 +1122,9 @@ bsod_hook:
         sta .vectors + .VECTOR_BRK+.hi
 }       ;///////////////////////////////////////////////////////////////////////
 
-        lda # .MEM_DEFAULT      ; turn *on* KERNAL,
-        sta .zp+1               ;  BASIC, and I/O
-
-        cli                     ; re-enable interrupts
+        pla                     ; retrieve old memory layout
+        sta .zp+1               ; (do this before restore interrupt state)
+        plp                     ; restore previous interrupt state
         rts
 
 bsod_hook_nmi:
